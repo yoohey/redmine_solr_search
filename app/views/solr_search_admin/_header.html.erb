@@ -1,0 +1,17 @@
+<%# The head of every tab of the admin page: the link to the plugin's settings (on the right, on every tab), the heading and the
+    tabs. extra: more links for the right (the sources' "new"). h2_focus: Redmine focuses the first text box of a page when
+    nothing has the focus, and scrolls to it; the heading has it, so that opening the tab does not scroll. %>
+<div class="contextual">
+  <%= local_assigns[:extra] %>
+  <%= link_to solr_search_icon('settings', l(:label_settings)), plugin_settings_path(id: 'redmine_solr_search'),
+              class: 'icon icon-settings' %>
+</div>
+
+<%# not the search screen's heading: the two pages are told apart (M1 review, ui 21) %>
+<% if local_assigns[:h2_focus] %>
+  <h2 tabindex="-1" autofocus style="outline: none"><%= l(:label_solr_search_admin_title) %></h2>
+<% else %>
+  <h2><%= l(:label_solr_search_admin_title) %></h2>
+<% end %>
+<%= render partial: 'tabs', locals: {selected: selected} %>
+<%= render partial: 'styles' %>

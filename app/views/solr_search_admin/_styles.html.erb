@@ -1,0 +1,15 @@
+<% content_for :header_tags do %>
+  <style>
+    table.list td.solr-search-number { text-align: right; }
+    table.solr-search-sources td.solr-search-linked a { white-space: nowrap; }
+    table.list code.solr-search-run-error { white-space: normal; word-break: break-all; }
+    details.solr-search-admin-more { margin: 0 0 0.5em; }
+    details.solr-search-admin-more summary { cursor: pointer; }
+    /* the Solr address box: a problem is a red band, and the field that it is about has a red edge */
+    input.solr-search-field-problem { border: 2px solid #c00; }
+    div.solr-search-state { margin: 8px 0; }
+    div.solr-search-state code { white-space: pre-wrap; word-break: break-all; }
+    div.solr-search-state pre { margin: 0.4em 0 0; white-space: pre-wrap; word-break: break-all; }
+    div.solr-search-state details summary { cursor: pointer; }
+  </style>
+<% end %>

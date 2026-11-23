@@ -1,0 +1,13 @@
+# redmine_solr_search: synonyms, expanded at query time only (both text types; common-types.xml, design D-21).
+# Solr format: a comma-separated line makes every term match every other (expand="true").
+# Editing this file needs an upload and a reload of the collections, not a re-index.
+# Write the terms already normalised: no char filter runs on them (NFKC form: ASCII letters and digits, full-width
+# katakana). Case does not matter (ignoreCase="true"). Each term is split by the field's tokenizer.
+# Nouns only so far: in rs_text_ja the list is matched before the base form, so an inflected verb may not match.
+#
+# PROVISIONAL: the four entries of schema v1 round 3a (docs/experiments/schema-v1), to be replaced as the search
+# logs show what users look for.
+首相,内閣総理大臣
+パソコン,PC,パーソナルコンピュータ
+議事録,会議録
+データ保持,データリテンション

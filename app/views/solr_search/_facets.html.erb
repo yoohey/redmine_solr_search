@@ -1,0 +1,96 @@
+<%# The choices left of the result (design D-49). The inputs belong to the search form above (the form attribute) and
+    search again when changed, as on a shop's page; without script, the button does it. The counts are about: the
+    containers that the search would give with that value chosen, the other choices kept. Each part can be folded. %>
+<% projects = @project ? [] : solr_search_project_facet %>
+<% sources = solr_search_source_facet %>
+<% updated = solr_search_updated_facet %>
+ <% folders = solr_search_folder_facet %>
+<% custom_sections = solr_search_custom_facets %>
+<% id_facets = SolrSearchHelper::FACET_LABELS.keys.index_with {|kind| solr_search_id_facet(kind) } %>
+<% if !@project || sources.any? || updated.any? || folders || custom_sections.any? || id_facets.values.any?(&:any?) %>
+<aside class="solr-search-facets" aria-label="<%= l(:label_solr_search_narrow) %>">
+  <% unless @project %>
+    <% if projects.any? %>
+      <%= render 'facet_list', title: l(:label_project), rows: projects.map {|project, count, chosen| [project.id, project.name, count, chosen] },
+                               name: 'project_ids[]', prefix: 'solr-search-project' %>
+    <% else %>
+      <%# before the first search (or when it found nothing): the projects to choose from %>
+      <details class="solr-search-facet-section" open>
+        <summary><%= l(:label_project) %></summary>
+        <p class="solr-search-facet-select">
+          <%= select_tag 'project_ids[]',
+                         content_tag('option', l(:label_solr_search_choose_project), value: '') +
+                           project_tree_options_for_select(Project.visible.sorted.to_a, selected: @projects),
+                         id: 'solr-search-projects', multiple: @projects.size > 1, form: 'solr-search-form' %>
+          <%# Redmine's +/- switch (application-legacy.js finds the select next to it); reachable by keyboard here %>
+          <span class="toggle-multiselect icon-only" role="button" tabindex="0"
+                title="<%= l(:label_solr_search_toggle_multiselect) %>"
+                aria-label="<%= l(:label_solr_search_toggle_multiselect) %>"><%= solr_search_icon('') %></span>
+        </p>
+      </details>
+    <% end %>
+  <% end %>
+
+  <%# the sources belong to projects: they are offered once a project is chosen, to narrow within it %>
+  <% if sources.any? %>
+    <%= render 'facet_list', title: l(:label_solr_search_facet_source), rows: sources.map {|collection, name, count, chosen| [collection, name, count, chosen] },
+                             name: 'source[]', prefix: 'solr-search-source' %>
+  <% end %>
+
+  <% if updated.any? %>
+    <details class="solr-search-facet-section" open>
+      <summary><%= l(:label_solr_search_facet_updated) %></summary>
+      <label><%= radio_button_tag 'updated', '', @filters[:updated].nil?, id: 'solr-search-updated-any', form: 'solr-search-form' %> <%= l(:label_solr_search_updated_any) %></label>
+      <% updated.each do |key, text, count, chosen| %>
+        <label title="<%= l(:label_solr_search_group_count, count: number_with_delimiter(SolrSearch::CountRounding.round(count))) %>"><%= radio_button_tag 'updated', key, chosen, id: "solr-search-updated-#{key}", form: 'solr-search-form' %> <%= text %></label>
+      <% end %>
+    </details>
+  <% end %>
+
+  <%# the folders of external documents: one level at a time, a click goes down one (D-49) %>
+  <% if folders %>
+    <details class="solr-search-facet-section" open>
+      <summary><%= l(:label_solr_search_facet_folder) %></summary>
+      <% if folders[:crumbs].any? %>
+        <p class="solr-search-folder-path">
+          <%= link_to(l(:label_solr_search_all_folders), solr_search_facet_path({}, [:folder])) %>
+          <% folders[:crumbs].each_with_index do |(name, path), index| %>
+            › <%= index == folders[:crumbs].size - 1 ? content_tag('strong', name) : link_to(name, solr_search_facet_path('folder' => path)) %>
+          <% end %>
+        </p>
+      <% end %>
+      <%# five are shown, the rest on request, as in the other lists (UI review 14; the script below folds and opens them) %>
+      <% [folders[:rows].first(5), folders[:rows].drop(5)].each_with_index do |part, n| %>
+        <% next if part.empty? %>
+        <div<%= raw(' class="solr-search-facet-extra"') if n == 1 %>>
+          <% part.each do |path, name, count| %>
+            <div class="solr-search-folder" title="<%= l(:label_solr_search_group_count, count: number_with_delimiter(SolrSearch::CountRounding.round(count))) %>"><%= link_to(name, solr_search_facet_path('folder' => path)) %></div>
+          <% end %>
+        </div>
+      <% end %>
+      <% if folders[:rows].size > 5 %>
+        <button type="button" class="solr-search-facet-toggle" hidden aria-expanded="false"
+                data-more="<%= l(:label_solr_search_show_more) %>" data-less="<%= l(:label_solr_search_show_less) %>"><%= l(:label_solr_search_show_more) %></button>
+      <% end %>
+    </details>
+  <% end %>
+
+  <%# the issue's values: the status is open, the others folded until chosen or opened (D-49) %>
+  <% id_facets.each do |kind, rows| %>
+    <% next if rows.empty? %>
+    <%= render 'facet_list', title: l(SolrSearchHelper::FACET_LABELS[kind]), rows: rows, name: "#{SolrSearch::Searcher::FACET_FILTERS[kind]}[]",
+                             prefix: "solr-search-#{kind}", open: %i[trackers statuses].include?(kind) %>
+  <% end %>
+  <%# the issue custom fields used as a filter: a list is chosen from, a number or a date is given a range (D-49) %>
+  <% custom_sections.each do |section| %>
+    <% custom = section[:custom] %>
+    <% if section[:rows] %>
+      <%= render 'facet_list', title: custom.name, rows: section[:rows], name: "cfv[#{custom.id}][]", prefix: "solr-search-cf-#{custom.id}", open: false %>
+    <% else %>
+      <%= render 'facet_range', custom: custom, range: section[:range], chosen: section[:chosen] %>
+    <% end %>
+  <% end %>
+  <noscript><p><%= submit_tag l(:label_solr_search_narrow_button), form: 'solr-search-form', name: nil %></p></noscript>
+</aside>
+<%# the script of the bar (folding, remembering, searching again when changed) is in index.html.erb: it must not be in what is swapped %>
+<% end %>

@@ -1,0 +1,39 @@
+<%# The Tika row of the status tab (design D-61), under Solr's and in the same form: the address as a text box with its button.
+    The box holds the address in use (the saved one, the environment variable's value, or the default); emptied, it shows the
+    environment variable's value (or the default) in faint type, and updating it then goes back to them. Saved whether or not
+    Tika answers. What a save did is told at the top of the box; whether Tika answers is asked each time the page is opened
+    (@tika_alive): a red band when it does not, unless the attachments are not processed at all (Tika is then not used). %>
+<% address, from = SolrSearch::Settings.tika_address %>
+<% fallback = ENV['TIKA_URL'].presence || SolrSearch::TikaClient::DEFAULT_URL %>
+<% in_use = SolrSearch::Settings['schedule_attachments_enabled'] == '1' %>
+<%= form_tag solr_search_admin_tika_url_path, class: 'tabular' do %>
+  <div class="box">
+    <% if @tika_url_result %>
+      <div class="flash <%= @tika_url_result['level'] %>"><%= @tika_url_result['text'] %></div>
+    <% end %>
+    <p>
+      <label for="solr_search_tika_url"><%= l(:label_solr_search_admin_tika_url) %></label>
+      <%= text_field_tag 'tika_url', address, id: 'solr_search_tika_url', size: 50, placeholder: fallback,
+                         class: ('solr-search-field-problem' if in_use && !@tika_alive) %>
+      <%= submit_tag l(:button_solr_search_solr_url_save) %>
+      <br><em class="info"><%= l(:text_solr_search_tika_url_hint) %></em>
+      <br><em class="info"><%= l(:"text_solr_search_tika_url_from_#{from}") %></em>
+    </p>
+    <% if @tika_alive %>
+      <p>
+        <label><%= l(:label_solr_search_admin_connection) %></label>
+        <span class="icon icon-ok"><%= solr_search_icon('checked', l(:label_solr_search_admin_connected, qtime: @tika_ms)) %></span>
+      </p>
+    <% elsif in_use %>
+      <div class="flash error solr-search-state">
+        <strong><%= l(:label_solr_search_tika_unreachable) %></strong>
+        <%= l(:text_solr_search_tika_unreachable_hint) %>
+      </div>
+    <% else %>
+      <p>
+        <label><%= l(:label_solr_search_admin_connection) %></label>
+        <em class="info"><%= l(:text_solr_search_tika_not_used) %></em>
+      </p>
+    <% end %>
+  </div>
+<% end %>

@@ -1,0 +1,214 @@
+<%= render partial: 'header', locals: {selected: 'tuning', h2_focus: true} %>
+
+<%# The fine tuning of the order of the results (design D-51, Q-34): for who wants to tune it, apart from the basic settings %>
+<p class="info"><%= l(:text_solr_search_tuning_intro) %></p>
+
+<%
+  ranges = SolrSearch::Tuning::RANGES
+  field = lambda do |path, value, range, label|
+    error = @errors && @errors[path]
+    default = path.split('.').inject(SolrSearch::Tuning::DEFAULTS) {|h, k| h.is_a?(Hash) ? h[k] : nil }
+    default = 1.0 if default.nil? && path.start_with?('sources.')
+    changed = default && value != default
+    content_tag('p', class: ('solr-search-tuning-error' if error)) do
+      safe_join([
+        label_tag("tuning_#{path.tr('.', '_')}", label),
+        number_field_tag("tuning[#{path.split('.').join('][')}]", (value == value.to_i ? value.to_i : value), step: 'any', min: range.min, max: range.max,
+                         id: "tuning_#{path.tr('.', '_')}", class: ('solr-search-tuning-changed' if changed)),
+        content_tag('span', l(:label_solr_search_tuning_default, value: (default == default.to_i ? default.to_i : default)), class: 'info'),
+        (content_tag('span', tuning_error_text(error, range), class: 'solr-search-tuning-error-text') if error)
+      ].compact, ' ')
+    end
+  end
+%>
+
+<%= form_tag("#{solr_search_admin_update_tuning_path}#result", method: :post, class: 'solr-search-tuning', data: {edited: (request.post? ? '1' : nil)}) do %>
+
+  <%# the page is long: the same save button at the top as at the bottom (UI review 7) %>
+  <p>
+    <%= content_tag :button, l(:button_save), type: 'submit', name: 'do', value: 'save' %>
+  </p>
+
+  <fieldset class="box">
+    <legend><%= l(:label_solr_search_tuning_options) %></legend>
+    <p>
+      <label for="options_expand_spelling_variants"><%= l(:setting_solr_search_expand_spelling_variants) %></label>
+      <%= check_box_tag 'options[expand_spelling_variants]', '1', @options['expand_spelling_variants'] %>
+      <em class="info"><%= l(:text_solr_search_expand_spelling_variants) %></em>
+    </p>
+    <p>
+      <label for="options_show_solr_request"><%= l(:setting_solr_search_show_solr_request) %></label>
+      <%= check_box_tag 'options[show_solr_request]', '1', @options['show_solr_request'] %>
+      <em class="info"><%= l(:text_solr_search_show_solr_request) %></em>
+    </p>
+    <p class="<%= 'solr-search-tuning-error' if @errors&.key?('options.highlight_style') %>">
+      <label for="options_highlight_style"><%= l(:setting_solr_search_highlight_style) %></label>
+      <%= search_field_tag 'options[highlight_style]', @options['highlight_style'], size: 60, id: 'options_highlight_style',
+                           placeholder: SolrSearch::Settings::DEFAULT_HIGHLIGHT_STYLE %>
+      <em class="info"><%= l(:text_solr_search_highlight_style) %></em>
+      <% if @errors&.key?('options.highlight_style') %><span class="solr-search-tuning-error-text"><%= l(:error_solr_search_tuning_long, max: SolrSearchTuningController::MAX_STYLE) %></span><% end %>
+    </p>
+    <%# a sample of what the style does, changing as it is typed (UI review 8); the same span and class as in the results,
+        braces and angle brackets dropped as on save %>
+    <p class="solr-search-highlight-sample">
+      <label><%= l(:label_solr_search_highlight_sample) %></label>
+      <span class="solr-search-results"><%= l(:text_solr_search_highlight_sample_before) %><span class="highlight" id="solr_search_highlight_sample"><%= l(:text_solr_search_highlight_sample_word) %></span><%= l(:text_solr_search_highlight_sample_after) %></span>
+    </p>
+    <%= javascript_tag do %>
+      (function () {
+        var input = document.getElementById('options_highlight_style');
+        var sample = document.getElementById('solr_search_highlight_sample');
+        if (!input || !sample) return;
+        function apply() { sample.style.cssText = input.value.replace(/[{}<>]/g, ''); }
+        input.addEventListener('input', apply);
+        apply();
+      })();
+    <% end %>
+  </fieldset>
+
+  <%# The optional external reranker (design D-56): no address, no reranker %>
+  <fieldset class="box">
+    <legend><%= l(:label_solr_search_reranker) %></legend>
+    <p class="info"><%= l(:text_solr_search_reranker) %></p>
+    <% reranker_error = lambda {|key| @errors&.key?("options.#{key}") ? content_tag('span', reranker_error_text(@errors["options.#{key}"]), class: 'solr-search-tuning-error-text') : nil } %>
+    <p>
+      <label for="options_reranker_url"><%= l(:label_solr_search_reranker_url) %></label>
+      <%= search_field_tag 'options[reranker_url]', @options['reranker_url'], size: 50, id: 'options_reranker_url', placeholder: 'http://reranker:8080' %>
+      <em class="info"><%= l(:text_solr_search_reranker_url) %></em> <%= reranker_error.call('reranker_url') %>
+    </p>
+    <p>
+      <label for="options_reranker_format"><%= l(:label_solr_search_reranker_format) %></label>
+      <%= select_tag 'options[reranker_format]', options_for_select([['TEI (/rerank)', 'tei'], ['Cohere (/v2/rerank)', 'cohere']], @options['reranker_format']), id: 'options_reranker_format' %>
+      <%= reranker_error.call('reranker_format') %>
+    </p>
+    <p>
+      <label for="options_reranker_model"><%= l(:label_solr_search_reranker_model) %></label>
+      <%= search_field_tag 'options[reranker_model]', @options['reranker_model'], size: 30, id: 'options_reranker_model' %>
+      <em class="info"><%= l(:text_solr_search_reranker_model) %></em> <%= reranker_error.call('reranker_model') %>
+    </p>
+    <% [['reranker_docs', SolrSearch::Reranker::DOCS], ['reranker_chars', SolrSearch::Reranker::CHARS], ['reranker_timeout', SolrSearch::Reranker::TIMEOUT]].each do |key, range| %>
+      <p>
+        <label for="options_<%= key %>"><%= l("label_solr_search_#{key}") %></label>
+        <%= number_field_tag "options[#{key}]", @options[key], min: range.min, max: range.max, id: "options_#{key}" %>
+        <em class="info"><%= l("text_solr_search_#{key}", min: range.min, max: range.max) %></em> <%= reranker_error.call(key) %>
+      </p>
+    <% end %>
+    <p class="info"><%= l(ENV[SolrSearch::Reranker::KEY_ENV].present? ? :text_solr_search_reranker_key_set : :text_solr_search_reranker_key_none, name: SolrSearch::Reranker::KEY_ENV) %></p>
+  </fieldset>
+
+  <% if @errors&.key?('qf') %><p class="solr-search-tuning-error-text"><%= tuning_error_text(@errors['qf'], nil) %></p><% end %>
+  <fieldset class="box">
+    <legend><%= l(:label_solr_search_tuning_fields) %></legend>
+    <p class="info"><%= l(:text_solr_search_tuning_fields) %></p>
+    <div class="solr-search-tuning-grid">
+      <% SolrSearch::Tuning::QF_FIELDS.each do |f| %>
+        <%= field.call("qf.#{f}", @draft['qf'][f], ranges[:weight], l("label_solr_search_tuning_field_#{f}")) %>
+      <% end %>
+      <%= field.call('pf2', @draft['pf2'], ranges[:phrase], l(:label_solr_search_tuning_phrase)) %>
+    </div>
+    <p class="info"><%= l(:text_solr_search_tuning_phrase) %></p>
+  </fieldset>
+
+  <fieldset class="box">
+    <legend><%= l(:label_solr_search_tuning_types) %></legend>
+    <p class="info"><%= l(:text_solr_search_tuning_factors) %></p>
+    <div class="solr-search-tuning-grid">
+      <% SolrSearch::Tuning::TYPES.each do |type| %>
+        <%= field.call("types.#{type}", @draft['types'][type], ranges[:factor], l("label_solr_search_tuning_type_#{type}")) %>
+      <% end %>
+    </div>
+  </fieldset>
+
+  <% if @source_names.any? %>
+    <fieldset class="box">
+      <legend><%= l(:label_solr_search_tuning_sources) %></legend>
+      <p class="info"><%= l(:text_solr_search_tuning_sources) %></p>
+      <div class="solr-search-tuning-grid">
+        <% @source_names.each do |collection, name| %>
+          <%= field.call("sources.#{collection}", @draft['sources'].fetch(collection, 1.0), ranges[:factor], "#{name} (#{collection})") %>
+        <% end %>
+      </div>
+    </fieldset>
+  <% end %>
+
+  <fieldset class="box">
+    <legend><%= l(:label_solr_search_tuning_recency) %></legend>
+    <p class="info"><%= l(:text_solr_search_tuning_recency) %></p>
+    <div class="solr-search-tuning-grid">
+      <%= field.call('recency.strength', @draft['recency']['strength'], ranges[:strength], l(:label_solr_search_tuning_recency_strength)) %>
+      <%= field.call('recency.half_life_days', @draft['recency']['half_life_days'], ranges[:half_life], l(:label_solr_search_tuning_recency_half_life)) %>
+    </div>
+  </fieldset>
+
+  <p>
+    <%= content_tag :button, l(:button_save), type: 'submit', name: 'do', value: 'save' %>
+    <%# not button_to: a form inside this form would end it there, and leave the trial search outside any form. The button
+        sends the form after this one (its confirm is on that form: rails-ujs asks a button with form= nothing) %>
+    <%= content_tag :button, l(:label_solr_search_tuning_reset), type: 'submit', form: 'solr-search-tuning-reset' %>
+  </p>
+
+  <fieldset class="box">
+    <legend><%= l(:label_solr_search_tuning_preview) %></legend>
+    <p class="info"><%= l(:text_solr_search_tuning_preview) %></p>
+    <p>
+      <%= label_tag 'preview_query', l(:label_solr_search_tuning_preview_query) %>
+      <%= search_field_tag 'preview_query', @preview_query, size: 40, data: {ignore_edit: '1'} %>
+      <%= content_tag :button, l(:label_solr_search_tuning_preview_button), type: 'submit', name: 'do', value: 'preview' %>
+    </p>
+  </fieldset>
+
+  <%# its result comes under the buttons; a background request replaces it (the page need not scroll) %>
+  <div id="preview-area">
+    <p class="solr-search-tuning-error-text"><% if @preview_error %><a id="result"></a><% end %><%= @preview_error %></p>
+    <% if @preview %>
+      <a id="result"></a>
+      <h3><%= l(:label_solr_search_tuning_preview_result, query: @preview_query) %></h3>
+      <%= render partial: 'preview_lists', locals: {lists: [[:label_solr_search_tuning_now, @preview[0], false], [:label_solr_search_tuning_with_form, @preview[1], true]]} %>
+    <% end %>
+  </div>
+<% end %>
+
+<%= form_tag(solr_search_admin_reset_tuning_path, method: :post, id: 'solr-search-tuning-reset', class: 'inline',
+             data: {confirm: l(:text_solr_search_tuning_reset_confirm)}) do %><% end %>
+
+<h3><%= l(:label_solr_search_tuning_history) %></h3>
+<% if @history.empty? %>
+  <p class="nodata"><%= l(:label_solr_search_tuning_history_none) %></p>
+<% else %>
+  <table class="list">
+    <thead><tr><th><%= l(:field_created_on) %></th><th><%= l(:field_user) %></th><th><%= l(:label_solr_search_change_details) %></th></tr></thead>
+    <tbody>
+      <% @history.each do |row, changes| %>
+        <tr>
+          <td><%= format_time(row.created_at) %></td>
+          <td><%= row.user_login %></td>
+          <td><%= changes.empty? ? l(:label_solr_search_tuning_no_change) : changes.map {|path, before, after| "#{tuning_path_label(path)}: #{before.inspect} → #{after.inspect}" }.join(' / ') %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+<% end %>
+
+<%= render partial: 'ajax_preview' %>
+<%= render partial: 'save_when_edited' %>
+
+<% content_for :header_tags do %>
+  <style>
+    .solr-search-tuning fieldset.box { margin-bottom: 1em; }
+    .solr-search-tuning label { display: inline-block; min-width: 20em; }
+    /* the fixed lists of numbers in two columns (a column on a narrow screen) */
+    .solr-search-tuning-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 2em; }
+    @media (max-width: 900px) { .solr-search-tuning-grid { grid-template-columns: 1fr; } }
+    .solr-search-tuning-grid > p { margin: 0.3em 0; }
+    .solr-search-tuning-grid label { width: 18em; min-width: 0; vertical-align: middle; } /* a fixed width: the boxes line up, a long name takes two lines */
+    .solr-search-tuning-grid input[type=number] { vertical-align: middle; }
+    .solr-search-tuning input[type=search] { max-width: 100%; }
+    .solr-search-tuning input[type=number] { width: 6em; }
+    .solr-search-tuning-changed { background: #fff6d9; }
+    .solr-search-tuning-error input { border-color: #b00; }
+    .solr-search-tuning-error-text { color: #b00; }
+    .solr-search-tuning-lists { display: flex; flex-wrap: wrap; gap: 0 2em; }
+    .solr-search-tuning-lists > div { flex: 1 1 28em; min-width: 0; }
+    form.inline { display: inline; }
+  </style>
+<% end %>

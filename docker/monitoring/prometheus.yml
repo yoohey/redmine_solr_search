@@ -1,0 +1,112 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Solr's own Prometheus output, one scrape per node (design D-39, solr-knowhow chapter 12)
+  - job_name: solr
+    metrics_path: /solr/admin/metrics
+    params:
+      wt: [prometheus]
+    # the nodes by their names: compose.solrcloud.yaml has solr1 and solr2, compose.solr.yaml answers to solr1. A name
+    # that does not exist gives no target (not a target that is down); add names here when you add nodes.
+    dns_sd_configs:
+      - names: [solr1, solr2, solr3, solr4]
+        type: A
+        port: 8983
+        refresh_interval: 30s
+    relabel_configs:
+      - source_labels: [__meta_dns_name]
+        target_label: instance
+        replacement: $1:8983
+    # Solr's output has a series for each core and each handler (about 30 of them): 21 collections of 2 replicas made 19,000
+    # series and 9,500 samples in each scrape, and most of them were not used by anything (design D-46 (f); M6 review #17).
+    # What is kept is the list below; anything else is dropped before it is stored. Of what is per handler, only the handlers of
+    # searching (/select) and of updating (/update). To keep something more, add its name to the list (the names are those of
+    # http://<solr>/solr/admin/metrics?wt=prometheus). source_labels are joined with ";": the name, then the handler (empty
+    # when the metric has none).
+    metric_relabel_configs:
+      - source_labels: [__name__, handler]
+        regex: 'solr_metrics_core_(requests_total|request_time_ms|request_time_ms_count|request_time_ms_sum);(/select|/update)|solr_metrics_core_(searcher_documents|index_size_bytes);.*|solr_metrics_(jvm_.+|node_.+|os|jetty_.+);.*'
+        action: keep
+
+  # The crawl's state (scheduler alive, each task's last run), from the plugin inside Redmine. Reached inside the
+  # network, with the token Redmine was given (METRICS_TOKEN in .env; compose.redmine.yaml and compose.monitoring.yaml).
+  - job_name: solr-search
+    metrics_path: /solr_search/metrics
+    authorization:
+      credentials_file: /etc/prometheus/metrics_token
+    # found by name, so that without Redmine here (a Redmine of your own) there is no target that is down: for your own
+    # Redmine, put its host and port in a static_configs instead
+    dns_sd_configs:
+      - names: [redmine]
+        type: A
+        port: 3000
+    relabel_configs:
+      - target_label: instance
+        replacement: redmine:3000
+
+  # How the index is against Redmine (design D-45): the page asks Solr, so it is read by a job of its own, less often and with a
+  # longer time limit, and what it says does not hold the page above
+  - job_name: solr-search-index
+    metrics_path: /solr_search/metrics/index
+    scrape_interval: 60s
+    scrape_timeout: 20s
+    authorization:
+      credentials_file: /etc/prometheus/metrics_token
+    # found by name, so that without Redmine here (a Redmine of your own) there is no target that is down: for your own
+    # Redmine, put its host and port in a static_configs instead
+    dns_sd_configs:
+      - names: [redmine]
+        type: A
+        port: 3000
+    relabel_configs:
+      - target_label: instance
+        replacement: redmine:3000
+
+  # Replica state, leader and live nodes (the native output above does not have them)
+  - job_name: solr-exporter
+    static_configs:
+      - targets: [solr:9854]   # the exporter runs in the network of the service "solr" (compose.monitoring.yaml)
+
+  # Is it alive? An HTTP probe through the blackbox exporter (no code needed in the target). The parts are found by name:
+  # a part that is not in this combination (no ManifoldCF, a Redmine of your own) gives no target, not one that is down.
+  - job_name: probe
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    dns_sd_configs:
+      - names: [redmine, tika, manifoldcf, solr]
+        type: A
+        port: 80   # not used: the blackbox exporter is what is scraped
+    relabel_configs:
+      - source_labels: [__meta_dns_name]
+        regex: redmine
+        target_label: __param_target
+        replacement: http://redmine:3000/
+      - source_labels: [__meta_dns_name]
+        regex: tika
+        target_label: __param_target
+        replacement: http://tika:9998/tika
+      - source_labels: [__meta_dns_name]
+        regex: manifoldcf
+        target_label: __param_target
+        replacement: http://manifoldcf:8345/mcf-crawler-ui/
+      - source_labels: [__meta_dns_name]
+        regex: solr
+        target_label: __param_target
+        replacement: http://solr:8983/solr/admin/info/system
+      - source_labels: [__meta_dns_name]
+        target_label: service
+      - source_labels: [__meta_dns_name]
+        regex: solr
+        target_label: service
+        replacement: solr-lb   # the name the dashboard knows (with SolrCloud it is the nginx in front)
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+
+  - job_name: prometheus
+    static_configs:
+      - targets: [localhost:9090]

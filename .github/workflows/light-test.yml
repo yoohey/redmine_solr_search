@@ -1,0 +1,58 @@
+# The light tests (test/unit): the parts of the plugin that need neither Redmine's database nor Solr, run with plain
+# minitest and Active Support, as bin/rake redmine:solr_search:light_test runs them in a Redmine folder. One job for
+# each supported Redmine, with the Ruby, the Active Support (Rails) and the rubyzip that Redmine runs on (its Gemfile).
+name: light tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Redmine ${{ matrix.redmine }} (Ruby ${{ matrix.ruby }}, Active Support ${{ matrix.activesupport }}, minitest ${{ matrix.minitest }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { redmine: '5.1', ruby: '3.2', activesupport: '6.1.0', rubyzip: '2.3.0', minitest: '5.0' }
+          - { redmine: '6.0', ruby: '3.3', activesupport: '7.2.0', rubyzip: '2.3.0', minitest: '5.0' }
+          - { redmine: '6.1', ruby: '3.4', activesupport: '7.2.0', rubyzip: '2.4.0', minitest: '5.0' }
+          - { redmine: '7.0', ruby: '4.0', activesupport: '8.1.0', rubyzip: '3.4.0', minitest: '6.0' }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
+        with:
+          ruby-version: ${{ matrix.ruby }}
+      # minitest: 5 where the Redmine uses 5. On Ruby 4.0 (Redmine 7.0, Rails 8.1) minitest 5 loads the tests and runs none,
+      # so 6 there, with minitest-mock: minitest 6 has moved minitest/mock, which some tests use, to that gem. The version is
+      # chosen before anything loads minitest (Ruby 4.0 comes with minitest 6 as a bundled gem)
+      - name: Install Active Support, rubyzip and minitest
+        shell: bash
+        run: |
+          gems=('activesupport:~> ${{ matrix.activesupport }}' 'rubyzip:~> ${{ matrix.rubyzip }}' 'minitest:~> ${{ matrix.minitest }}')
+          [[ '${{ matrix.minitest }}' == 5.* ]] || gems+=(minitest-mock)
+          gem install --no-document "${gems[@]}"
+      - name: Light tests
+        env:
+          ACTIVESUPPORT: ${{ matrix.activesupport }}
+          RUBYZIP: ${{ matrix.rubyzip }}
+          MINITEST: ${{ matrix.minitest }}
+        shell: bash
+        # a run of no test is a failure, not a pass
+        run: |
+          ruby -Itest -e '
+            gem "minitest", "~> #{ENV.fetch("MINITEST")}"
+            gem "minitest-mock" unless ENV.fetch("MINITEST").start_with?("5.")
+            gem "activesupport", "~> #{ENV.fetch("ACTIVESUPPORT")}"
+            gem "rubyzip", "~> #{ENV.fetch("RUBYZIP")}"
+            puts "Ruby #{RUBY_VERSION}, Active Support #{Gem.loaded_specs["activesupport"].version}, rubyzip #{Gem.loaded_specs["rubyzip"].version}, minitest #{Gem.loaded_specs["minitest"].version}"
+            Dir["test/unit/*_test.rb"].sort.each {|f| require File.expand_path(f) }' | tee "$RUNNER_TEMP/light.txt"
+          grep -qE '^[1-9][0-9]* runs, ' "$RUNNER_TEMP/light.txt"

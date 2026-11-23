@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- redmine_solr_search: schema of the "redmine" collection (Redmine data, design D-26 / D-27).
+     Read-only (ClassicIndexSchemaFactory in solrconfig.xml): change this file and solr/common/, not the Schema API.
+     common-types.xml / common-fields.xml come from solr/common/ and are copied next to this file on upload. -->
+<schema name="redmine" version="1.7">
+  <xi:include href="common-types.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
+  <xi:include href="common-fields.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
+
+  <!-- Returned only (fl): the IDs to trace back to Redmine (D-25) -->
+  <field name="item_id" type="pint" indexed="false" stored="true"/>  <!-- issues.id, journals.id, attachments.id, ... -->
+
+  <uniqueKey>id</uniqueKey>
+</schema>

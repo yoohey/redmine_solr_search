@@ -1,0 +1,66 @@
+<%# The index tab: the reindexes asked for (design D-42, D-36). Only written down here; the scheduler runs them within a minute %>
+<%= render partial: 'header', locals: {selected: 'reindex'} %>
+
+<%# A full reindex asked for (design D-42): only written down here; the scheduler runs it within a minute %>
+<h3><%= l(:label_solr_search_admin_reindex) %></h3>
+<%# a partial reindex (D-57) waits for its own; it does not mark the types of the full one %>
+<% waiting_types = SolrSearch::Requests.waiting.reject {|row| SolrSearch::Requests.scope_of(row) }.flat_map {|row| SolrSearch::Requests.types_of(row) }.uniq %>
+<%# The question names the types that are chosen when the button is pressed (the script below); with none chosen, nothing is sent
+    (M6 review 13). The names are the labels of the boxes. %>
+<%= form_tag solr_search_admin_requests_path, class: 'tabular', id: 'solr-search-reindex-form',
+             data: {confirm_template: l(:text_solr_search_reindex_confirm), none_chosen: l(:text_solr_search_reindex_none_chosen)} do %>
+  <div class="box">
+    <p>
+      <% SolrSearch::Indexer.types.each do |type| %>
+        <label class="inline"><%= check_box_tag 'types[]', type, true, id: "solr-search-reindex-#{type}" %> <span class="solr-search-type-name"><%= solr_search_doc_type_label(type) %></span><%= content_tag('em', l(:text_solr_search_reindex_type_waiting), class: 'info') if waiting_types.include?(type) %></label>
+      <% end %>
+    </p>
+    <p><%= submit_tag l(:button_solr_search_reindex) %></p>
+    <% if @next_runs.values.any? && (@heartbeat.nil? || @heartbeat.silent?) %>
+      <p><%= solr_search_admin_warning(l(:text_solr_search_reindex_scheduler_silent)) %></p>
+    <% end %>
+  </div>
+<% end %>
+<%= render partial: 'requests', locals: {requests: @requests, title: :label_solr_search_reindex_runs,
+                                         none_days: :text_solr_search_reindex_none_days, none: :text_solr_search_reindex_none} %>
+<%= solr_search_admin_note(:text_solr_search_reindex) %>
+
+<%= render partial: 'partial_reindex' %>
+
+<%# The attachments apart (design D-42, D-36): Tika makes the text of every file again, which is slow, and the run holds the
+    slot, so the other crawls wait meanwhile. Its own button and its own list of runs. %>
+<h3><%= l(:label_solr_search_attachment_reindex) %></h3>
+<%= form_tag solr_search_admin_requests_path, class: 'tabular' do %>
+  <div class="box">
+    <%= hidden_field_tag 'types[]', SolrSearch::Indexer::ATTACHMENT, id: nil %>
+    <p><em class="info"><%= l(:text_solr_search_reindex_attachment_hint) %></em></p>
+    <p><em class="info"><%= l(:text_solr_search_attachment_extensions_admin, list: SolrSearch::Settings.attachment_extensions.join(' ')) %>
+      <%= link_to l(:label_settings), plugin_settings_path(id: 'redmine_solr_search') %></em></p>
+    <p><%= submit_tag l(:button_solr_search_attachment_reindex), data: {confirm: l(:text_solr_search_attachment_reindex_confirm)} %></p>
+    <% if @next_runs.values.any? && (@heartbeat.nil? || @heartbeat.silent?) %>
+      <p><%= solr_search_admin_warning(l(:text_solr_search_reindex_scheduler_silent)) %></p>
+    <% end %>
+  </div>
+<% end %>
+<%= render partial: 'requests', locals: {requests: @attachment_requests, title: :label_solr_search_attachment_reindex_runs,
+                                         none_days: :text_solr_search_attachment_reindex_none_days,
+                                         none: :text_solr_search_attachment_reindex_none} %>
+
+<%= render partial: 'run_history' %>
+
+<%= javascript_tag do %>
+  (function () {
+    var form = document.getElementById('solr-search-reindex-form');
+    if (!form) return;
+    form.addEventListener('submit', function (event) {
+      var names = Array.prototype.map.call(form.querySelectorAll('input[type=checkbox]:checked'), function (box) {
+        var name = box.parentNode.querySelector('.solr-search-type-name');
+        return name ? name.textContent.trim() : box.value;
+      });
+      if (names.length === 0) { alert(form.dataset.noneChosen); event.preventDefault(); return; }
+      if (!confirm(form.dataset.confirmTemplate.replace('%{types}', names.join('、')))) event.preventDefault();
+    });
+  })();
+<% end %>
+
+<% html_title(l(:label_administration), l(:label_solr_search_admin_title)) -%>

@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+ Licensed to the Apache Software Foundation (ASF) under one or more
+ contributor license agreements.  See the NOTICE file distributed with
+ this work for additional information regarding copyright ownership.
+ The ASF licenses this file to You under the Apache License, Version 2.0
+ (the "License"); you may not use this file except in compliance with
+ the License.  You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<config>
+
+  <!--
+  Derived from the solr-exporter-config.xml shipped in the solr:9.10.1 image (/opt/solr/prometheus-exporter/conf/),
+  keeping only the <ping> and <collections> rules (replica state, leader, live nodes). Solr's own Prometheus output
+  (/solr/admin/metrics?wt=prometheus) is scraped by Prometheus directly, so <metrics> and <search> are left out
+  to avoid duplicate series. The jq templates are not used by these two rules and are left out as well.
+  -->
+
+  <rules>
+
+    <ping>
+      <lst name="request">
+        <lst name="query">
+          <str name="path">/admin/ping</str>
+        </lst>
+        <arr name="jsonQueries">
+          <str>
+            . as $object | $object |
+            (if $object.status == "OK" then 1.0 else 0.0 end) as $value |
+            {
+              name         : "solr_ping",
+              type         : "GAUGE",
+              help         : "See following URL: https://solr.apache.org/guide/solr/latest/deployment-guide/ping.html",
+              label_names  : [],
+              label_values : [],
+              value        : $value
+            }
+          </str>
+        </arr>
+      </lst>
+    </ping>
+
+    <collections>
+      <lst name="request">
+        <lst name="query">
+          <str name="path">/admin/collections</str>
+          <lst name="params">
+            <str name="action">CLUSTERSTATUS</str>
+          </lst>
+        </lst>
+        <arr name="jsonQueries">
+          <str>
+            .cluster.live_nodes | length as $value|
+            {
+              name         : "solr_collections_live_nodes",
+              type         : "GAUGE",
+              help         : "See following URL: https://solr.apache.org/guide/solr/latest/deployment-guide/cluster-node-management.html#clusterstatus",
+              label_names  : [],
+              label_values : [],
+              value        : $value
+            }
+          </str>
+          <str>
+            .cluster.collections | to_entries | .[] | . as $object |
+            $object.key as $collection |
+            $object.value.pullReplicas | tonumber as $value |
+            {
+              name         : "solr_collections_pull_replicas",
+              type         : "GAUGE",
+              help         : "See following URL: https://solr.apache.org/guide/solr/latest/deployment-guide/cluster-node-management.html#clusterstatus",
+              label_names  : ["collection"],
+              label_values : [$collection],
+              value        : $value
+            }
+          </str>
+          <str>
+            .cluster.collections | to_entries | .[] | . as $object |
+            $object.key as $collection |
+            $object.value.nrtReplicas | tonumber as $value |
+            {
+              name         : "solr_collections_nrt_replicas",
+              type         : "GAUGE",
+              help         : "See following URL: https://solr.apache.org/guide/solr/latest/deployment-guide/cluster-node-management.html#clusterstatus",
+              label_names  : ["collection"],
+              label_values : [$collection],
+              value        : $value
+            }
+          </str>
+          <str>
+            .cluster.collections | to_entries | .[] | . as $object |
+            $object.key as $collection |
+            $object.value.tlogReplicas | tonumber as $value |
+            {
+              name         : "solr_collections_tlog_replicas",
+              type         : "GAUGE",
+              help         : "See following URL: https://solr.apache.org/guide/solr/latest/deployment-guide/cluster-node-management.html#clusterstatus",
+              label_names  : ["collection"],
+              label_values : [$collection],
+              value        : $value
+            }
+          </str>
+          <str>
+            .cluster.collections | to_entries | .[] | . as $object |
+            $object.key as $collection |
+            $object.value.shards | to_entries | .[] | . as $shard_obj |
+            $shard_obj.key as $shard |
+            (if $shard_obj.value.state == "active" then 1.0 else 0.0 end) as $value |
+            {
+              name         : "solr_collections_shard_state",
+              type         : "GAUGE",
+              help         : "See following URL: https://solr.apache.org/guide/solr/latest/deployment-guide/cluster-node-management.html#clusterstatus",
+              label_names  : ["collection","shard"],
+              label_values : [$collection,$shard],
+              value        : $value
+            }
+          </str>
+          <str>
+            .cluster.collections | to_entries | .[] | . as $object |
+            $object.key as $collection |
+            $object.value.shards | to_entries | .[] | . as $shard_obj |
+            $shard_obj.key as $shard |
+            $shard_obj.value.replicas | to_entries | .[] | . as $replica_obj |
+            $replica_obj.key as $replica_name |
+            $replica_obj.value.core as $core |
+            $core[$collection + "_" + $shard + "_" | length:] as $replica |
+            $replica_obj.value.base_url as $base_url |
+            $replica_obj.value.node_name as $node_name |
+            $replica_obj.value.type as $type |
+            $replica_obj.value.state as $state |
+            (if $state == "active" then 1.0 else 0.0 end) as $value |
+            {
+              name         : "solr_collections_replica_state",
+              type         : "GAUGE",
+              help         : "See following URL: https://solr.apache.org/guide/solr/latest/deployment-guide/cluster-node-management.html#clusterstatus",
+              label_names  : ["collection", "shard", "replica", "replica_name", "core", "base_url", "node_name", "type", "state"],
+              label_values : [$collection, $shard, $replica, $replica_name, $core, $base_url, $node_name, $type, $state],
+              value        : $value
+            }
+          </str>
+
+          <str>
+            .cluster.collections | to_entries | .[] | . as $object |
+            $object.key as $collection |
+            $object.value.shards | to_entries | .[] | . as $shard_obj |
+            $shard_obj.key as $shard |
+            $shard_obj.value.replicas | to_entries | .[] | . as $replica_obj |
+            $replica_obj.key as $replica_name |
+            $replica_obj.value.core as $core |
+            $core[$collection + "_" + $shard + "_" | length:] as $replica |
+            $replica_obj.value.base_url as $base_url |
+            $replica_obj.value.node_name as $node_name |
+            $replica_obj.value.type as $type |
+            (if $replica_obj.value.leader == "true" then 1.0 else 0.0 end) as $value |
+            {
+              name         : "solr_collections_shard_leader",
+              type         : "GAUGE",
+              help         : "See following URL: https://solr.apache.org/guide/solr/latest/deployment-guide/cluster-node-management.html#clusterstatus",
+              label_names  : ["collection", "shard", "replica", "replica_name", "core", "base_url", "node_name", "type"],
+              label_values : [$collection, $shard, $replica, $replica_name, $core, $base_url, $node_name, $type],
+              value        : $value
+            }
+          </str>
+        </arr>
+      </lst>
+      <lst name="request">
+        <lst name="query">
+          <str name="path">/admin/zookeeper/status</str>
+        </lst>
+        <arr name="jsonQueries">
+          <str>
+            .zkStatus.ensembleSize as $value |
+            .zkStatus.mode as $mode |
+            {
+            name         : "solr_zookeeper_ensemble_size",
+            type         : "GAUGE",
+            help         : "See following URL: https://solr.apache.org/guide/solr/latest/deployment-guide/cloud-screens.html#zk-status-view",
+            label_names  : [],
+            label_values : [],
+            value        : $value
+            }
+          </str>
+          <str>
+            .zkStatus.details[] as $object |
+            $object.host as $host |
+            $object.ok as $ok |
+            (if $object.clientPort != null and $ok then 1.0 else 0.0 end) as $value |
+            {
+            name         : "solr_zookeeper_nodestatus",
+            type         : "GAUGE",
+            help         : "See following URL: https://solr.apache.org/guide/solr/latest/deployment-guide/cloud-screens.html#zk-status-view",
+            label_names  : ["host"],
+            label_values : [$host],
+            value        : $value
+            }
+          </str>
+          <str>
+            .zkStatus.status as $statusText |
+            (if $statusText == "green" then 1.0 else 0.0 end) as $value |
+            {
+            name         : "solr_zookeeper_status",
+            type         : "GAUGE",
+            help         : "See following URL: https://solr.apache.org/guide/solr/latest/deployment-guide/cloud-screens.html#zk-status-view",
+            label_names  : ["status"],
+            label_values : [$statusText],
+            value        : $value
+            }
+          </str>
+        </arr>
+      </lst>
+    </collections>
+
+
+  </rules>
+
+</config>

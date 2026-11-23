@@ -1,0 +1,9 @@
+<%# The admin page's tabs (design D-34): each is a page of its own, so the status tab's calls to Solr run only there %>
+<%= render_tabs([{name: 'status', label: :label_solr_search_admin_tab_status, url: solr_search_admin_path},
+                 {name: 'reindex', label: :label_solr_search_admin_tab_reindex, url: solr_search_admin_reindex_path},
+                 {name: 'sources', label: :label_solr_search_admin_tab_sources, url: solr_search_admin_sources_path},
+                 {name: 'log', label: :label_solr_search_admin_tab_log, url: solr_search_admin_log_path},
+                 {name: 'synonyms', label: :label_solr_search_admin_tab_synonyms, url: solr_search_admin_synonyms_path},
+                 {name: 'tuning', label: :label_solr_search_admin_tab_tuning, url: solr_search_admin_tuning_path},
+                 {name: 'changes', label: :label_solr_search_admin_tab_changes, url: solr_search_admin_changes_path}],
+                selected) %>

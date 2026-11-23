@@ -1,0 +1,30 @@
+# Apache ManifoldCF (the Apache project's image, its single-process example with HSQLDB in a volume): crawls the folder
+# below on its schedule and puts the documents into the collection of an external source (src_<name>). The jobs are made
+# by docker/manifoldcf/add-folder (or on its own screen, http://localhost:8345/mcf-crawler-ui/, admin / admin).
+# On its screen, do not open the connection of the Tika Server with View or Edit: ManifoldCF 2.31 then loses a connection
+# for good and the crawl waits 15 minutes (docs/operations.md, 5.1).
+services:
+  manifoldcf-init:
+    image: apache/manifoldcf:2.31
+    user: "0"
+    entrypoint: ["sh", "-c", "chown 100001:100002 /data"]   # the image runs as manifoldcf (100001); a new volume is root's
+    restart: "no"
+    volumes:
+      - manifoldcf_data:/data
+
+  manifoldcf:
+    image: apache/manifoldcf:2.31
+    restart: unless-stopped
+    depends_on:
+      manifoldcf-init: { condition: service_completed_successfully }
+    mem_limit: 1g
+    ports:
+      - "127.0.0.1:${MCF_PORT:-8345}:8345"
+    volumes:
+      - manifoldcf_data:/data
+      - ./manifoldcf/properties.xml:/usr/share/manifoldcf/example/properties.xml:ro   # HSQLDB in /data
+      # the folder to crawl, read only; ManifoldCF sees it at MCF_SOURCE_PATH (the path that goes into the index)
+      - ${MCF_SOURCE_DIR:-./data/mcf-source}:${MCF_SOURCE_PATH:-/source}:ro
+
+volumes:
+  manifoldcf_data:

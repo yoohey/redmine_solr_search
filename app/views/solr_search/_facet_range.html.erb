@@ -1,0 +1,18 @@
+<%# A custom field of a number or a date, chosen by a range (design D-49): two inputs, with the smallest and the largest that the
+    search finds as their hints. locals: custom, range ({min:, max:}), chosen ({min:, max:} or {from:, to:}) %>
+<% number = custom.kind == :number %>
+<% keys = number ? %i[min max] : %i[from to] %>
+<% type = number ? 'number' : 'date' %>
+<% hint = ->(value) { number ? (value.to_f % 1).zero? ? value.to_i : value : value.to_s[0, 10] } %>
+<details class="solr-search-facet-section" <%= 'open' if chosen.any? %>>
+  <summary><%= custom.name %></summary>
+  <div class="solr-search-range">
+    <% keys.zip([range[:min], range[:max]]).each do |key, bound| %>
+      <%# the words go where the language puts them: "[ ] から" in Japanese, "From [ ]" in English %>
+      <% input = tag.input(type: type, name: "cfr[#{custom.id}][#{key}]", value: chosen[key], step: (number ? 'any' : nil),
+                           placeholder: (hint.(bound) if bound), form: 'solr-search-form', id: "solr-search-cf-#{custom.id}-#{key}") %>
+      <% before, after = l("label_solr_search_range_#{key}", input: "\u0000").split("\u0000", 2) %>
+      <label><%= before %><%= input %><%= after %></label>
+    <% end %>
+  </div>
+</details>

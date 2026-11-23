@@ -1,0 +1,10 @@
+<%# What narrows this search, each with a link that takes it off (design D-49) %>
+<% tags = solr_search_chosen_tags %>
+<% if tags.any? %>
+  <p class="solr-search-chosen">
+    <% tags.each do |text, path| %>
+      <span class="solr-search-chosen-item"><%= text %> <%= link_to('×', path, title: l(:label_solr_search_facet_remove), 'aria-label': "#{text}: #{l(:label_solr_search_facet_remove)}") %></span>
+    <% end %>
+    <%= link_to(l(:label_solr_search_clear_all), solr_search_facet_path({}, %i[types project_ids source updated folder cfv cfr] + SolrSearch::Searcher::ID_FILTERS.keys + SolrSearch::Searcher::STRING_FILTERS.keys)) if tags.size > 1 %>
+  </p>
+<% end %>

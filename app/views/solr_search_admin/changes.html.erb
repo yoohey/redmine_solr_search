@@ -1,0 +1,40 @@
+<%= render partial: 'header', locals: {selected: 'changes'} %>
+
+<% if @source_id %>
+  <p>
+    <%= l(:label_solr_search_changes_of_source, name: @changes.first&.source_name || "##{@source_id}") %>
+    <%= link_to l(:label_solr_search_changes_all), solr_search_admin_changes_path %>
+  </p>
+<% end %>
+
+<% if @changes.empty? %>
+  <p class="nodata"><%= l(:label_no_data) %></p>
+<% else %>
+  <table class="list solr-search-changes">
+    <thead>
+      <tr>
+        <th><%= l(:field_created_on) %></th>
+        <th><%= l(:field_user) %></th>
+        <th><%= l(:label_solr_search_change_action) %></th>
+        <th><%= l(:label_solr_search_source) %></th>
+        <th><%= l(:label_project) %></th>
+        <th><%= l(:label_solr_search_change_details) %></th>
+      </tr>
+    </thead>
+    <tbody>
+      <% @changes.each do |change| %>
+        <tr>
+          <td><%= format_time(change.created_at) %></td>
+          <td><%= change.user ? link_to_user(change.user) : l(:label_solr_search_change_no_user) %></td>
+          <td><%= l(:"label_solr_search_change_#{change.action}") %></td>
+          <td><%= link_to change.source_name, solr_search_admin_changes_path(source_id: change.source_id) if change.source_id %></td>
+          <td><%= change.project_name %></td>
+          <td><%= solr_search_change_details(change) %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+  <span class="pagination"><%= pagination_links_full @change_pages, @change_count, per_page_links: false %></span>
+<% end %>
+
+<% html_title(l(:label_administration), l(:label_solr_search_admin_title), l(:label_solr_search_admin_tab_changes)) -%>

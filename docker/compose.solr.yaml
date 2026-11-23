@@ -1,0 +1,45 @@
+# Solr, one node (SolrCloud with its embedded ZooKeeper), and solr-init, which uploads this plugin's configsets and
+# makes the collection "redmine" on every `docker compose up` (then it exits). Use this or compose.solrcloud.yaml.
+# The other parts reach it as http://solr:8983/solr.
+services:
+  solr:
+    image: solr:9.10.1
+    hostname: solr
+    restart: unless-stopped
+    command: ["solr", "start", "-c", "-f"]   # -c without -z: the embedded ZooKeeper (localhost:9983 inside the container)
+    environment:
+      SOLR_HOST: solr
+      SOLR_HEAP: ${SOLR_HEAP:-512m}
+      SOLR_MODULES: analysis-extras   # ICU normalisation (solr/common/common-types.xml)
+    ports:
+      - "${SOLR_BIND:-127.0.0.1}:${SOLR_PORT:-8983}:8983"
+    volumes:
+      - solr:/var/solr
+    networks:
+      default:
+        aliases: [solr1]   # the name of the first node, as in compose.solrcloud.yaml (monitoring reads the nodes by these)
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8983/solr/admin/info/health > /dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+
+  solr-init:
+    image: solr:9.10.1
+    restart: "no"
+    entrypoint: ["bash", "/init/init.sh"]
+    network_mode: "service:solr"   # the embedded ZooKeeper listens on localhost only
+    environment:
+      ZK_HOST: localhost:9983
+      SOLR_URL: http://localhost:8983/solr
+      REPLICATION_FACTOR: "1"
+    depends_on:
+      solr: { condition: service_healthy }
+    # the image declares /var/solr a volume: without this, each container would leave an unnamed one behind (solr's uid)
+    tmpfs: ["/var/solr:uid=8983,gid=8983,mode=0770"]
+    volumes:
+      - ./solr-init:/init:ro
+      - ../solr:/solr:ro   # configsets/ + common/
+
+volumes:
+  solr:

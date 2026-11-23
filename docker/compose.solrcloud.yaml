@@ -1,0 +1,108 @@
+# SolrCloud: two Solr nodes, three ZooKeeper nodes, and nginx in front of them under the name "solr" (so the other parts
+# reach it as http://solr:8983/solr, as with compose.solr.yaml), and solr-init (configsets and the collection
+# "redmine", 1 shard x 2 replicas, on every `docker compose up`). Use this or compose.solr.yaml.
+# A ManifoldCF outside Docker sends to a node itself (SOLR1_PORT): its Solr client speaks HTTP/2, which nginx here does not.
+x-zoo: &zoo
+  image: zookeeper:3.9.5
+  restart: unless-stopped
+  tmpfs: [/logs]   # declared a volume by the image, and empty (it logs to stdout): no unnamed volume left behind
+  healthcheck:
+    test: ["CMD-SHELL", "echo ruok | nc -w 2 localhost 2181 | grep -q imok"]
+    interval: 5s
+    timeout: 5s
+    retries: 30
+
+x-solr-node: &solr-node
+  image: solr:9.10.1
+  restart: unless-stopped
+  command: ["solr-foreground"]
+  depends_on:
+    zoo1: { condition: service_healthy }
+    zoo2: { condition: service_healthy }
+    zoo3: { condition: service_healthy }
+  healthcheck:   # 503 until the node is in ZooKeeper's live nodes
+    test: ["CMD-SHELL", "curl -sf http://localhost:8983/solr/admin/info/health > /dev/null"]
+    interval: 5s
+    timeout: 5s
+    retries: 60
+
+services:
+  zoo1:
+    <<: *zoo
+    hostname: zoo1
+    environment: &zoo-env
+      ZOO_MY_ID: 1
+      ZOO_SERVERS: server.1=zoo1:2888:3888;2181 server.2=zoo2:2888:3888;2181 server.3=zoo3:2888:3888;2181
+      ZOO_4LW_COMMANDS_WHITELIST: ruok,mntr,conf,srvr
+    volumes: [ "zoo1_data:/data", "zoo1_datalog:/datalog" ]
+  zoo2:
+    <<: *zoo
+    hostname: zoo2
+    environment: { <<: *zoo-env, ZOO_MY_ID: 2 }
+    volumes: [ "zoo2_data:/data", "zoo2_datalog:/datalog" ]
+  zoo3:
+    <<: *zoo
+    hostname: zoo3
+    environment: { <<: *zoo-env, ZOO_MY_ID: 3 }
+    volumes: [ "zoo3_data:/data", "zoo3_datalog:/datalog" ]
+
+  solr1:
+    <<: *solr-node
+    hostname: solr1
+    environment: &solr-env
+      SOLR_HOST: solr1
+      ZK_HOST: zoo1:2181,zoo2:2181,zoo3:2181
+      SOLR_HEAP: ${SOLR_HEAP:-1g}
+      SOLR_MODULES: analysis-extras   # ICU normalisation (solr/common/common-types.xml)
+    ports:
+      - "${SOLR1_BIND:-127.0.0.1}:${SOLR1_PORT:-8984}:8983"
+    volumes: [ "solr1_data:/var/solr" ]
+  solr2:
+    <<: *solr-node
+    hostname: solr2
+    environment: { <<: *solr-env, SOLR_HOST: solr2 }
+    volumes: [ "solr2_data:/var/solr" ]
+
+  # nginx in front of the two nodes: the address the other parts use (http://solr:8983/solr)
+  solr:
+    image: nginx:1.30.5-alpine
+    restart: unless-stopped
+    depends_on:
+      solr1: { condition: service_healthy }
+      solr2: { condition: service_healthy }
+    volumes:
+      - ./nginx/solr-lb.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${SOLR_BIND:-127.0.0.1}:${SOLR_PORT:-8983}:8983"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8983/nginx-health > /dev/null   # localhost is ::1 there, and nginx listens on IPv4"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  solr-init:
+    image: solr:9.10.1
+    restart: "no"
+    entrypoint: ["bash", "/init/init.sh"]
+    environment:
+      ZK_HOST: zoo1:2181,zoo2:2181,zoo3:2181
+      SOLR_URL: http://solr1:8983/solr
+      REPLICATION_FACTOR: "2"
+    depends_on:
+      solr1: { condition: service_healthy }
+      solr2: { condition: service_healthy }
+    # the image declares /var/solr a volume: without this, each container would leave an unnamed one behind (solr's uid)
+    tmpfs: ["/var/solr:uid=8983,gid=8983,mode=0770"]
+    volumes:
+      - ./solr-init:/init:ro
+      - ../solr:/solr:ro   # configsets/ + common/
+
+volumes:
+  zoo1_data:
+  zoo1_datalog:
+  zoo2_data:
+  zoo2_datalog:
+  zoo3_data:
+  zoo3_datalog:
+  solr1_data:
+  solr2_data:

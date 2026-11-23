@@ -1,0 +1,185 @@
+<%= render partial: 'header', locals: {selected: 'synonyms', h2_focus: true} %>
+
+<%# The query expansion dictionary (design D-53, Q-27): for who looks after the old and new names and the short forms %>
+<p class="info"><%= l(:text_solr_search_synonyms_intro) %></p>
+
+<%# The words that did not help, to write the dictionary by: a word fills the trial search below (design D-45, D-53) %>
+<fieldset class="box solr-search-synonyms-log">
+  <legend><%= l(:label_solr_search_synonyms_log) %></legend>
+  <p class="info"><%= l(:text_solr_search_synonyms_log, days: @log_days) %></p>
+  <div class="splitcontent">
+    <% [[:label_solr_search_log_top_zero, @top_zero], [:label_solr_search_log_top_noclick, @top_noclick]].each do |title, rows| %>
+      <div class="splitcontentleft">
+        <h4><%= l(title, count: SolrSearchLog::TOP) %></h4>
+        <% if rows.empty? %>
+          <p class="nodata"><%= l(:label_no_data) %></p>
+        <% else %>
+          <p>
+            <% rows.each do |query, times| %>
+              <a href="#preview_query" class="solr-search-synonyms-word" data-word="<%= query %>"><%= query %></a><span class="info">(<%= times %>)</span>
+            <% end %>
+          </p>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+  <p>
+    <%= link_to l(:label_solr_search_synonyms_log_open), solr_search_admin_log_path(days: @log_days, zero: '1') %> |
+    <%= link_to l(:button_solr_search_log_export), solr_search_admin_log_export_path(days: @log_days, zero: '1'), class: 'icon icon-download' %>
+  </p>
+</fieldset>
+
+<%= form_tag("#{solr_search_admin_update_synonyms_path}#result", method: :post, class: 'solr-search-synonyms', data: {edited: (request.post? ? '1' : nil)}) do %>
+
+  <fieldset class="box">
+    <legend><%= l(:label_solr_search_synonyms_text) %></legend>
+    <p class="info"><%= l(:text_solr_search_synonyms_format) %></p>
+    <details><summary><%= l(:label_solr_search_synonyms_example) %></summary><pre><%= l(:text_solr_search_synonyms_example) %></pre></details>
+    <%= text_area_tag 'synonyms_text', @draft_text, rows: 16, spellcheck: 'false', style: 'width: 100%; font-family: monospace;' %>
+    <p class="solr-search-synonyms-files">
+      <%= link_to l(:label_solr_search_synonyms_download), solr_search_admin_export_synonyms_path, class: 'icon icon-download' %>
+      <label for="synonyms_file"><%= l(:label_solr_search_synonyms_upload) %></label>
+      <%# no name: the file is read here and its text goes into the box; it is not sent %>
+      <input type="file" id="synonyms_file" accept=".txt,text/plain">
+      <span class="info" id="synonyms_file_message"></span>
+    </p>
+    <%# What is wrong with the text, and what only looks wrong (the check button); a background request replaces this area %>
+    <div id="validate-area">
+      <% if @parsed && (@parsed.problems.any? || @validated) %>
+        <% unless @preview || @preview_error %><a id="result"></a><% end %>
+        <% if @parsed.problems.any? %>
+          <ul class="solr-search-synonyms-problems">
+            <% @parsed.problems.each do |problem| %><li><%= synonym_problem_text(problem) %></li><% end %>
+          </ul>
+          <p class="solr-search-synonyms-problems"><%= l(:text_solr_search_synonyms_not_saved) %></p>
+        <% end %>
+        <% if @validated %>
+          <% if @warnings.any? %>
+            <ul class="solr-search-synonyms-warnings">
+              <% @warnings.each do |warning| %><li><%= synonym_warning_text(warning) %></li><% end %>
+            </ul>
+          <% end %>
+          <% if @parsed.problems.empty? %>
+            <p class="solr-search-synonyms-ok"><%= l(:text_solr_search_synonyms_valid, count: @parsed.groups.size) %></p>
+          <% end %>
+        <% end %>
+      <% end %>
+    </div>
+  </fieldset>
+
+  <p>
+    <%= content_tag :button, l(:button_save), type: 'submit', name: 'do', value: 'save' %>
+    <%= content_tag :button, l(:label_solr_search_synonyms_validate), type: 'submit', name: 'do', value: 'validate' %>
+    <%# not button_to: a form inside this form would end it there, and leave the trial search outside any form. The button
+        sends the form after this one (its confirm is on that form: rails-ujs asks a button with form= nothing) %>
+    <%= content_tag :button, l(:label_solr_search_synonyms_reset), type: 'submit', form: 'solr-search-synonyms-reset' %>
+  </p>
+
+  <fieldset class="box">
+    <legend><%= l(:label_solr_search_tuning_preview) %></legend>
+    <p class="info"><%= l(:text_solr_search_synonyms_preview) %></p>
+    <p>
+      <%= label_tag 'preview_query', l(:label_solr_search_tuning_preview_query) %>
+      <%= search_field_tag 'preview_query', @preview_query, size: 40, data: {ignore_edit: '1'} %>
+      <%= content_tag :button, l(:label_solr_search_tuning_preview_button), type: 'submit', name: 'do', value: 'preview' %>
+    </p>
+  </fieldset>
+
+  <%# its result comes under the buttons; a background request replaces it (the page need not scroll) %>
+  <div id="preview-area">
+    <p class="solr-search-synonyms-problems"><% if @preview_error %><a id="result"></a><% end %><%= @preview_error %></p>
+    <% if @preview %>
+      <a id="result"></a>
+      <h3><%= l(:label_solr_search_tuning_preview_result, query: @preview_query) %></h3>
+      <% expanded = @places.select {|alternatives| alternatives.size > 1 } %>
+      <% if expanded.empty? %>
+        <p class="info"><%= l(:text_solr_search_synonyms_no_expansion) %></p>
+      <% else %>
+        <p class="info"><%= l(:text_solr_search_synonyms_expanded) %></p>
+        <ul><% expanded.each do |alternatives| %><li><%= synonym_place_text(alternatives) %></li><% end %></ul>
+      <% end %>
+      <%= render partial: 'preview_lists', locals: {lists: [[:label_solr_search_synonyms_now, @preview[0], false], [:label_solr_search_synonyms_with_form, @preview[1], true]]} %>
+    <% end %>
+  </div>
+<% end %>
+
+<%= form_tag(solr_search_admin_reset_synonyms_path, method: :post, id: 'solr-search-synonyms-reset', class: 'inline',
+             data: {confirm: l(:text_solr_search_synonyms_reset_confirm)}) do %><% end %>
+
+<h3><%= l(:label_solr_search_tuning_history) %></h3>
+<% if @history.empty? %>
+  <p class="nodata"><%= l(:label_solr_search_synonyms_history_none) %></p>
+<% else %>
+  <table class="list">
+    <thead><tr><th><%= l(:field_created_on) %></th><th><%= l(:field_user) %></th><th><%= l(:label_solr_search_change_details) %></th></tr></thead>
+    <tbody>
+      <% @history.each do |row, added, removed| %>
+        <tr>
+          <td><%= format_time(row.created_at) %></td>
+          <td><%= row.user_login %></td>
+          <td>
+            <% if added.empty? && removed.empty? %><%= l(:label_solr_search_tuning_no_change) %><% end %>
+            <% added.first(5).each do |line| %><div>+ <%= line.truncate(120) %></div><% end %>
+            <% removed.first(5).each do |line| %><div>− <%= line.truncate(120) %></div><% end %>
+            <% rest = [added.size - 5, 0].max + [removed.size - 5, 0].max %>
+            <% if rest.positive? %><div class="info"><%= l(:label_solr_search_synonyms_more_lines, count: rest) %></div><% end %>
+          </td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+<% end %>
+
+<%= render partial: 'ajax_preview' %>
+<%= render partial: 'save_when_edited' %>
+<script>
+  (function () {
+    var file = document.getElementById('synonyms_file');
+    var box = document.getElementById('synonyms_text');
+    var message = document.getElementById('synonyms_file_message');
+    if (!file || !box || !window.FileReader || !window.TextDecoder) { return; }
+    var MAX = <%= SolrSearch::QueryDictionary::MAX_BYTES %>;
+    file.addEventListener('change', function () {
+      var chosen = file.files[0];
+      message.textContent = '';
+      if (!chosen) { return; }
+      if (chosen.size > MAX) { message.textContent = <%= raw l(:error_solr_search_synonyms_upload_big, max: SolrSearch::QueryDictionary::MAX_BYTES / 1024).to_json %>; file.value = ''; return; }
+      var reader = new FileReader();
+      reader.onload = function () {
+        var bytes = new Uint8Array(reader.result);
+        var text;
+        try { text = new TextDecoder('utf-8', {fatal: true}).decode(bytes); }
+        catch (e) { text = new TextDecoder('shift_jis').decode(bytes); } // a text file saved in Japanese Windows
+        if (box.value.trim() !== '' && box.value !== text && !window.confirm(<%= raw l(:text_solr_search_synonyms_upload_confirm).to_json %>)) { file.value = ''; return; }
+        box.value = text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+        box.dispatchEvent(new Event('input', {bubbles: true}));
+        message.textContent = <%= raw l(:text_solr_search_synonyms_upload_done).to_json %>;
+        file.value = '';
+      };
+      reader.readAsArrayBuffer(chosen);
+    });
+  })();
+  document.querySelectorAll('.solr-search-synonyms-word').forEach(function (link) {
+    link.addEventListener('click', function (event) {
+      event.preventDefault();
+      var box = document.getElementById('preview_query');
+      box.value = link.dataset.word;
+      box.focus();
+    });
+  });
+</script>
+
+<% content_for :header_tags do %>
+  <style>
+    .solr-search-synonyms fieldset.box { margin-bottom: 1em; }
+    .solr-search-synonyms-problems { color: #b00; }
+    .solr-search-synonyms-warnings { color: #8a5a00; }
+    .solr-search-synonyms-ok { color: #2a7a2a; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .solr-search-synonyms-word { margin-right: .2em; }
+    .solr-search-synonyms-log .info { margin-right: 1em; }
+    .solr-search-tuning-lists { display: flex; flex-wrap: wrap; gap: 0 2em; }
+    .solr-search-tuning-lists > div { flex: 1 1 28em; min-width: 0; }
+    form.inline { display: inline; }
+  </style>
+<% end %>

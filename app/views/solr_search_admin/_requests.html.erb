@@ -1,0 +1,44 @@
+<%# The requests of one section of the status tab (design D-42), newest first. The row of a request is the row of its run, so
+    its state goes on from waiting to running to done; it can be taken back only while it waits.
+    requests: SolrSearchRun rows; title: the heading's key; none_days / none: the keys of the text for no request at all %>
+<h4><%= l(local_assigns[:title]) %></h4>
+<% if requests.empty? %>
+  <%# nothing waits, runs or was done within the retention period of the run records %>
+  <p class="nodata">
+    <% days = SolrSearch::Settings['run_retention_days'].to_i %>
+    <%= days.positive? ? l(local_assigns[:none_days], days: days) : l(local_assigns[:none]) %>
+  </p>
+<% else %>
+  <table class="list">
+    <thead>
+      <tr>
+        <th><%= l(:label_solr_search_reindex_request) %></th>
+        <th><%= l(:label_solr_search_reindex_requested_at) %></th>
+        <th><%= l(:field_status) %></th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <% requests.each do |request| %>
+        <tr>
+          <td class="name">
+            <%= SolrSearch::Requests.types_of(request).map {|type| solr_search_doc_type_label(type) }.join('、') %>
+            <%# a partial reindex (D-57): what it is limited to %>
+            <% scope = SolrSearch::Requests.scope_of(request) %>
+            <% if scope %><br><em class="info"><%= solr_search_scope_label(scope) %></em><% end %>
+          </td>
+          <td><%= format_time(request.created_at) %></td>
+          <td>
+            <%= solr_search_run_status(request) %>
+            <% if request.error.present? %><br><code class="solr-search-run-error"><%= request.error %></code><% end %>
+          </td>
+          <td class="buttons">
+            <% if request.status == 'requested' %>
+              <%= button_to l(:button_cancel), solr_search_admin_request_path(request), method: :delete, class: 'icon icon-del' %>
+            <% end %>
+          </td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+<% end %>

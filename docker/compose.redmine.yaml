@@ -1,0 +1,75 @@
+# Redmine with this plugin, PostgreSQL, the plugin's scheduler, and the sample data (put in once). For trying it out:
+# open http://localhost:3000/ and log in as admin (the password is SEED_PASSWORD, "password" unless changed).
+# The repository itself is the plugin: it is mounted, nothing is built.
+x-redmine: &redmine
+  image: redmine:${REDMINE_VERSION:-6.1.5}
+  restart: unless-stopped
+  environment: &redmine-env
+    REDMINE_DB_POSTGRES: db
+    REDMINE_DB_DATABASE: redmine
+    REDMINE_DB_USERNAME: redmine
+    REDMINE_DB_PASSWORD: ${DB_PASSWORD:-redmine}
+    SECRET_KEY_BASE: ${SECRET_KEY_BASE:-change-me-this-is-for-trying-it-out-only}   # Rails (the image passes it on as it is)
+    SOLR_URL: ${SOLR_URL:-http://solr:8983/solr}
+    TIKA_URL: ${TIKA_URL:-http://tika:9998}
+    SOLR_SEARCH_METRICS_TOKEN: ${METRICS_TOKEN:-change-me-metrics-token}   # for monitoring (/solr_search/metrics): the same default as compose.monitoring.yaml
+  volumes:
+    - files:/usr/src/redmine/files
+    - ..:/usr/src/redmine/plugins/redmine_solr_search:ro
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: redmine
+      POSTGRES_USER: redmine
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-redmine}
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U redmine -d redmine"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+  redmine:
+    <<: *redmine
+    environment:
+      <<: *redmine-env
+      REDMINE_PLUGINS_MIGRATE: "1"   # the image's entrypoint runs redmine:plugins:migrate only when this is set
+    ports:
+      - "127.0.0.1:${REDMINE_PORT:-3000}:3000"
+    depends_on:
+      db: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/3000'"]
+      interval: 5s
+      timeout: 5s
+      retries: 120
+
+  # the sample data, once: Redmine's default data (Japanese), then docker/seed/ja-basic; then it exits
+  seed:
+    <<: *redmine
+    restart: "no"
+    command: ["bash", "plugins/redmine_solr_search/docker/redmine/seed.sh"]
+    environment:
+      <<: *redmine-env
+      SEED_PASSWORD: ${SEED_PASSWORD:-password}
+    depends_on:
+      redmine: { condition: service_healthy }
+      solr-init: { condition: service_completed_successfully, required: false }
+      tika: { condition: service_started, required: false }
+
+  # the crawl: every minute it runs what is due; with no index yet, it makes the whole index first. After the sample data
+  # (the incremental crawl starts from the time of the first index: data put in before it with older dates is in it)
+  scheduler:
+    <<: *redmine
+    command: ["rake", "redmine:solr_search:scheduler"]
+    depends_on:
+      seed: { condition: service_completed_successfully }
+      solr-init: { condition: service_completed_successfully, required: false }
+
+volumes:
+  db:
+  files:

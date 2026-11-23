@@ -1,0 +1,80 @@
+<%# The Solr row of the status tab (design D-43, D-44): the address and the collection of Redmine's data as text boxes with
+    one button (it saves both). The address box holds the address in use (the saved one, or the environment variable's value
+    when none is saved); emptied, it shows the environment variable's value in faint type, and updating it then goes back to
+    the environment variable (UI review 1). Saved whether or not Solr answers. What a save did is told at the top of this
+    box; what is wrong with the state is a red band in it, so that it is seen when the page is opened again. A state that
+    is fine stays quiet. status: SolrSearch::Status, or nil (no address at all: nothing to ask). %>
+<% saved_collection = SolrSearch::Settings.stored['redmine_collection'].to_s %>
+<% address = SolrSearch::Settings.solr_address %>
+<% check = status&.check %>
+<% unreachable = status && !status.connected? %>
+<% collection_problem = check && %i[missing schema].include?(check.state) %>
+<%= form_tag solr_search_admin_solr_url_path, class: 'tabular' do %>
+  <div class="box">
+    <% if @solr_url_result %>
+      <div class="flash <%= @solr_url_result['level'] %>"><%= @solr_url_result['text'] %></div>
+    <% end %>
+    <p>
+      <label for="solr_search_solr_url"><%= l(:label_solr_search_admin_url) %></label>
+      <%= text_field_tag 'solr_url', address&.first, id: 'solr_search_solr_url', size: 50, placeholder: ENV['SOLR_URL'].to_s,
+                         class: ('solr-search-field-problem' if unreachable) %>
+      <br><em class="info"><%= l(:text_solr_search_solr_url_hint) %></em>
+    </p>
+    <p>
+      <label for="solr_search_collection"><%= l(:label_solr_search_solr_collection) %></label>
+      <%= text_field_tag 'collection', saved_collection, id: 'solr_search_collection', size: 30, placeholder: SolrSearch::COLLECTION,
+                         class: ('solr-search-field-problem' if collection_problem) %>
+      <br><em class="info"><%= l(:text_solr_search_solr_collection_hint, name: SolrSearch.collection) %></em>
+    </p>
+    <%# one button for the two boxes: each used to have its own, and either saved both (M6 review 14) %>
+    <p>
+      <label></label>
+      <%= submit_tag l(:button_solr_search_solr_url_save) %>
+      <em class="info"><%= l(:text_solr_search_solr_url_both) %></em>
+    </p>
+    <% if status %>
+      <% if unreachable %>
+        <%# Solr does not answer: the first thing to see in the box %>
+        <div class="flash error solr-search-state">
+          <strong><%= l(:label_solr_search_state_unreachable) %></strong>
+          <%= l(:text_solr_search_state_unreachable_hint) %>
+          <% if (hint = solr_search_connection_hint(status.error)) %><br><%= hint %><% end %>
+          <details>
+            <summary><%= l(:label_solr_search_state_detail) %></summary>
+            <code><%= solr_search_short_error(status.error) %></code>
+          </details>
+        </div>
+      <% elsif check&.state == :missing %>
+        <%# Redmine does not make the collection (design D-44): the administrator does; what to run, with this address and name %>
+        <div class="flash error solr-search-state">
+          <strong><%= l(:label_solr_search_collection_missing, name: SolrSearch.collection) %></strong>
+          <% if check.configset_present == false %>
+            <br><%= l(:text_solr_search_collection_make_configset, configset: SolrSearch::SchemaCheck::CONFIGSET) %>
+          <% end %>
+          <br><%= l(:text_solr_search_collection_make_collection, configset: SolrSearch::SchemaCheck::CONFIGSET, replicas: check.replicas) %>
+          <pre><code><%= SolrSearch::SchemaCheck.create_command(address.first, SolrSearch.collection, replicas: check.replicas) %></code></pre>
+        </div>
+      <% elsif check&.state == :schema %>
+        <div class="flash error solr-search-state">
+          <strong><%= l(:label_solr_search_collection_schema, name: SolrSearch.collection, count: check.problems.size) %></strong>
+          <ul>
+            <% check.problems.each do |problem| %>
+              <li><%= l(:"text_solr_search_schema_problem_#{problem.kind}", name: problem.name, expected: problem.expected, actual: problem.actual) %></li>
+            <% end %>
+          </ul>
+          <%= l(:text_solr_search_schema_limits) %>
+        </div>
+      <% else %>
+        <p>
+          <label><%= l(:label_solr_search_admin_connection) %></label>
+          <span class="icon icon-ok"><%= solr_search_icon('checked', l(:label_solr_search_admin_connected, qtime: status.qtime || 0)) %></span>
+        </p>
+        <p>
+          <label><%= l(:label_solr_search_collection_check) %></label>
+          <span class="icon icon-ok"><%= solr_search_icon('checked', l(:label_solr_search_collection_ok, name: SolrSearch.collection)) %></span>
+        </p>
+      <% end %>
+    <% end %>
+    <p class="info"><%= l(:text_solr_search_solr_url_changed) %></p>
+  </div>
+<% end %>

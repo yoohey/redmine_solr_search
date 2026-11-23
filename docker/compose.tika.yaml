@@ -1,0 +1,11 @@
+# Apache Tika Server: the text of the attachments (and of the files ManifoldCF crawls). The other parts reach it as
+# http://tika:9998.
+services:
+  tika:
+    image: apache/tika:4.1.0   # not -full: no OCR
+    restart: unless-stopped
+    environment:
+      JAVA_TOOL_OPTIONS: -Xmx384m   # for the server and for each of its forked parser JVMs
+    mem_limit: 1536m   # the server forks 4 parser JVMs: with less, the kernel may kill it under load
+    ports:
+      - "${TIKA_BIND:-127.0.0.1}:${TIKA_PORT:-9998}:9998"

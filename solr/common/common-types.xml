@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- redmine_solr_search: field types shared by every configset (design D-26).
+     Included by each configset's schema.xml through XInclude; solr-init copies this file into each configset before
+     uploading it (see solr/README.md). Every type used by a field in common-fields.xml is defined here, so that the
+     same field has the same type and analysis in every collection.
+     Schema v1 (docs/experiments/schema-v1): round 1 the shape, round 2 normalisation (the two char filters, the same
+     in both text types, at index and query time), round 3a synonyms (query time only), round 3b the n-gram type,
+     round 3c the ヴ row left as written (not folded into the バ row; the plugin may expand the query instead).
+     The ICU char filter needs the analysis-extras module on every Solr node (SOLR_MODULES, docker/compose.yaml).
+     No cjkWidth filter: it folds full-width ASCII and half-width katakana, a subset of what NFKC already did in the
+     char filter (removed after the review of 2026-09-29; round 2 re-run to confirm nothing changed).
+     Synonyms (synonyms-ja.txt) are expanded at query time only, so editing the list needs an upload and a reload,
+     not a re-index. The entries are split by the same tokenizer as the field (tokenizerFactory); no char filter and
+     no later filter runs on them, so write them already normalised (NFKC). -->
+<types>
+  <!-- Primitive types: same definitions as Solr 9.10 _default (schema version 1.7: docValues on by default) -->
+  <fieldType name="string"  class="solr.StrField" sortMissingLast="true"/>
+  <fieldType name="boolean" class="solr.BoolField" sortMissingLast="true"/>
+  <fieldType name="pint"    class="solr.IntPointField"/>
+  <fieldType name="plong"   class="solr.LongPointField"/>
+  <fieldType name="pdate"   class="solr.DatePointField"/>
+  <fieldType name="pdouble" class="solr.DoublePointField"/>
+
+  <!-- Morphological analysis (Kuromoji). Used only by the unstored search copies (*_ja) (design D-21) -->
+  <fieldType name="rs_text_ja" class="solr.TextField" positionIncrementGap="100" autoGeneratePhraseQueries="true">
+    <analyzer type="index">
+      <!-- mapping-ja.txt first: it holds what NFKC would get wrong for highlighting (see that file) -->
+      <charFilter name="mapping" mapping="mapping-ja.txt"/>
+      <charFilter name="icuNormalizer2" form="nfkc"/>
+      <tokenizer name="japanese" mode="search"/>
+      <filter name="japaneseBaseForm"/>
+      <filter name="japanesePartOfSpeechStop" tags="lang/stoptags_ja.txt"/>
+      <filter name="stop" ignoreCase="true" words="lang/stopwords_ja.txt"/>
+      <filter name="japaneseKatakanaStem" minimumLength="4"/>
+      <filter name="lowercase"/>
+    </analyzer>
+    <analyzer type="query">
+      <charFilter name="mapping" mapping="mapping-ja.txt"/>
+      <charFilter name="icuNormalizer2" form="nfkc"/>
+      <tokenizer name="japanese" mode="search"/>
+      <!-- Right after the tokenizer, entries split in the same mode as the field (round 3a). Matching happens on the
+           tokenizer's output, before the base form: an inflected verb may not match an entry (not verified) -->
+      <filter name="synonymGraph" synonyms="synonyms-ja.txt" ignoreCase="true" expand="true"
+              tokenizerFactory="solr.JapaneseTokenizerFactory" tokenizerFactory.mode="search"/>
+      <filter name="japaneseBaseForm"/>
+      <filter name="japanesePartOfSpeechStop" tags="lang/stoptags_ja.txt"/>
+      <filter name="stop" ignoreCase="true" words="lang/stopwords_ja.txt"/>
+      <filter name="japaneseKatakanaStem" minimumLength="4"/>
+      <filter name="lowercase"/>
+    </analyzer>
+  </fieldType>
+
+  <!-- N-gram, two characters (round 3b). Used by the stored fields that are shown and highlighted (design D-21).
+       Unlike cjkBigram it takes synonyms (a graph of tokens), and it also matches part of an ASCII word ("red" in
+       "Redmine"). A one-character word gives no token here: it is found by the *_ja copy, without a snippet. -->
+  <fieldType name="rs_text_ngram" class="solr.TextField" positionIncrementGap="100" autoGeneratePhraseQueries="true">
+    <analyzer type="index">
+      <charFilter name="mapping" mapping="mapping-ja.txt"/>
+      <charFilter name="icuNormalizer2" form="nfkc"/>
+      <tokenizer name="nGram" minGramSize="2" maxGramSize="2"/>
+      <filter name="lowercase"/>
+    </analyzer>
+    <analyzer type="query">
+      <charFilter name="mapping" mapping="mapping-ja.txt"/>
+      <charFilter name="icuNormalizer2" form="nfkc"/>
+      <tokenizer name="nGram" minGramSize="2" maxGramSize="2"/>
+      <filter name="synonymGraph" synonyms="synonyms-ja.txt" ignoreCase="true" expand="true"
+              tokenizerFactory="solr.NGramTokenizerFactory" tokenizerFactory.minGramSize="2" tokenizerFactory.maxGramSize="2"/>
+      <filter name="lowercase"/>
+    </analyzer>
+  </fieldType>
+</types>

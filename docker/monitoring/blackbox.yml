@@ -1,0 +1,9 @@
+modules:
+  # 2xx or 3xx counts as alive (ManifoldCF's UI redirects to its login page)
+  http_2xx:
+    prober: http
+    timeout: 8s
+    http:
+      method: GET
+      follow_redirects: false
+      valid_status_codes: [200, 301, 302, 303, 307]

@@ -1,0 +1,20 @@
+<%# The save button is live only after the form was edited (design D-53). The text of the form when the page opened is the
+    starting point; what is typed in the trial search box (data-ignore-edit) does not count. A page that comes back from a post
+    (data-edited on the form) keeps what was sent: it is not saved yet. %>
+<script>
+  (function () {
+    var form = document.querySelector('form.solr-search-tuning, form.solr-search-synonyms');
+    var save = form && form.querySelector('button[value=save]');
+    if (!save) { return; }
+    var state = function () {
+      return Array.prototype.filter.call(form.elements, function (el) { return el.name && !el.hasAttribute('data-ignore-edit') && el.name !== 'do' && el.name !== 'authenticity_token'; })
+        .map(function (el) { return el.name + '=' + ((el.type === 'checkbox' || el.type === 'radio') ? el.checked : el.value); }).join('&');
+    };
+    var start = state();
+    var edited = form.hasAttribute('data-edited');
+    var update = function () { save.disabled = !(edited || state() !== start); };
+    update();
+    form.addEventListener('input', update);
+    form.addEventListener('change', update);
+  })();
+</script>

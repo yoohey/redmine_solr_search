@@ -1,0 +1,16 @@
+# The public repository's .gitignore (design D-59): publish/build.sh puts it at that repository's root. In the development
+# repository it works as it is for publish/, where the same paths lie (publish/docker -> docker/).
+
+# The settings with passwords and tokens (the examples, env.example.*, are in git)
+/docker/.env
+/docker/.env.*
+
+# What is put there to try things out, above all the documents to crawl (MCF_SOURCE_DIR's default)
+/docker/data/*
+!/docker/data/mcf-source/
+/docker/data/mcf-source/*
+!/docker/data/mcf-source/.gitkeep
+
+.DS_Store
+__pycache__/
+*.pyc

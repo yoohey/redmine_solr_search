@@ -1,0 +1,85 @@
+{
+  "line": "横浜線",
+  "stations": [
+    {
+      "order": 1,
+      "name": "東神奈川"
+    },
+    {
+      "order": 2,
+      "name": "大口"
+    },
+    {
+      "order": 3,
+      "name": "菊名"
+    },
+    {
+      "order": 4,
+      "name": "新横浜"
+    },
+    {
+      "order": 5,
+      "name": "小机"
+    },
+    {
+      "order": 6,
+      "name": "鴨居"
+    },
+    {
+      "order": 7,
+      "name": "中山"
+    },
+    {
+      "order": 8,
+      "name": "十日市場"
+    },
+    {
+      "order": 9,
+      "name": "長津田"
+    },
+    {
+      "order": 10,
+      "name": "成瀬"
+    },
+    {
+      "order": 11,
+      "name": "町田"
+    },
+    {
+      "order": 12,
+      "name": "古淵"
+    },
+    {
+      "order": 13,
+      "name": "淵野辺"
+    },
+    {
+      "order": 14,
+      "name": "矢部"
+    },
+    {
+      "order": 15,
+      "name": "相模原"
+    },
+    {
+      "order": 16,
+      "name": "橋本"
+    },
+    {
+      "order": 17,
+      "name": "相原"
+    },
+    {
+      "order": 18,
+      "name": "八王子みなみ野"
+    },
+    {
+      "order": 19,
+      "name": "片倉"
+    },
+    {
+      "order": 20,
+      "name": "八王子"
+    }
+  ]
+}

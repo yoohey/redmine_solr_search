@@ -1,0 +1,134 @@
+<%# A partial reindex asked for (design D-57): the issues of some trackers, or the issues that have, or had, a value in some custom
+    fields; their notes, and the permission and custom field values of their attachments. Written down here, like the full
+    one; the scheduler runs it. The "look at the index" button finds the custom fields only the index has (deleted ones). %>
+<h3><%= l(:label_solr_search_partial_reindex) %></h3>
+<p class="info"><%= l(:text_solr_search_partial_intro) %></p>
+<%# With JavaScript the button asks for the list in the background (the page stays where it is); without it, the page is loaded again with the list %>
+<%= form_tag solr_search_admin_reindex_path, method: :get, class: 'tabular', id: 'solr-search-partial-inspect-form',
+             data: {url: solr_search_admin_reindex_inspect_path, deleted_label: l(:label_solr_search_partial_deleted_field, id: '%{id}'),
+                    count_label: l(:text_solr_search_partial_deleted_count, count: '%{count}'), none: l(:text_solr_search_partial_no_deleted)} do %>
+  <%= hidden_field_tag 'inspect', '1', id: nil %>
+  <p><%= submit_tag l(:button_solr_search_partial_inspect), name: nil %>
+    <em class="info"><%= l(:text_solr_search_partial_inspect) %></em></p>
+<% end %>
+<div id="solr-search-partial-inspect-result">
+  <% if @inspect_error %>
+    <p><%= solr_search_admin_warning(@inspect_error) %></p>
+  <% elsif @deleted_fields&.empty? %>
+    <p class="info"><%= l(:text_solr_search_partial_no_deleted) %></p>
+  <% end %>
+</div>
+
+<%= form_tag solr_search_admin_requests_path, class: 'tabular', id: 'solr-search-partial-form',
+             data: {estimate_url: solr_search_admin_reindex_estimate_path, count_template: l(:text_solr_search_partial_count, count: '%{count}'),
+                    confirm_template: l(:text_solr_search_partial_confirm), none_chosen: l(:text_solr_search_partial_none_chosen)} do %>
+  <div class="box">
+    <p>
+      <label class="inline"><%= radio_button_tag 'scope_kind', 'trackers', true %> <%= l(:label_tracker_plural) %></label>
+      <label class="inline"><%= radio_button_tag 'scope_kind', 'fields', false %> <%= l(:label_custom_field_plural) %></label>
+    </p>
+    <p id="solr-search-partial-trackers">
+      <% @trackers.each do |tracker| %>
+        <label class="inline"><%= check_box_tag 'trackers[]', tracker.id, false, id: "solr-search-partial-tracker-#{tracker.id}" %> <span class="solr-search-partial-name"><%= tracker.name %></span></label>
+      <% end %>
+    </p>
+    <p id="solr-search-partial-fields" style="display: none">
+      <% @fields.each do |field| %>
+        <label class="inline"><%= check_box_tag 'fields[]', field.id, false, id: "solr-search-partial-field-#{field.id}", disabled: true %> <span class="solr-search-partial-name"><%= field.name %></span></label>
+      <% end %>
+      <% Array(@deleted_fields).each do |deleted| %>
+        <label class="inline"><%= check_box_tag 'fields[]', deleted[:id], false, id: "solr-search-partial-field-#{deleted[:id]}", disabled: true %>
+          <span class="solr-search-partial-name"><%= l(:label_solr_search_partial_deleted_field, id: deleted[:id]) %></span>
+          <em class="info"><%= l(:text_solr_search_partial_deleted_count, count: number_with_delimiter(deleted[:count])) %></em></label>
+      <% end %>
+    </p>
+    <p><span id="solr-search-partial-count" class="info"></span></p>
+    <p><%= submit_tag l(:button_solr_search_partial_reindex) %></p>
+    <% if @next_runs.values.any? && (@heartbeat.nil? || @heartbeat.silent?) %>
+      <p><%= solr_search_admin_warning(l(:text_solr_search_reindex_scheduler_silent)) %></p>
+    <% end %>
+  </div>
+<% end %>
+
+<%= javascript_tag do %>
+  (function () {
+    var form = document.getElementById('solr-search-partial-form');
+    if (!form) return;
+    var lists = {trackers: document.getElementById('solr-search-partial-trackers'),
+                 fields: document.getElementById('solr-search-partial-fields')};
+    var count = document.getElementById('solr-search-partial-count');
+    function kind() { return form.querySelector('input[name=scope_kind]:checked').value; }
+    function chosen() {
+      return Array.prototype.slice.call(lists[kind()].querySelectorAll('input[type=checkbox]:checked'));
+    }
+    // only the chosen kind is sent: the boxes of the other are disabled
+    function show() {
+      Object.keys(lists).forEach(function (k) {
+        lists[k].style.display = k === kind() ? '' : 'none';
+        Array.prototype.forEach.call(lists[k].querySelectorAll('input[type=checkbox]'), function (box) { box.disabled = k !== kind(); });
+      });
+      estimate();
+    }
+    var asked = 0;
+    function estimate() {
+      var boxes = chosen();
+      var mine = ++asked; // an answer that comes after a newer question is dropped
+      if (boxes.length === 0) { count.textContent = ''; return; }
+      var url = form.dataset.estimateUrl + '?' + kind() + '=' + boxes.map(function (b) { return b.value; }).join(',');
+      fetch(url, {headers: {Accept: 'application/json'}, credentials: 'same-origin'})
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (mine !== asked) return;
+          count.textContent = data.count === null || data.count === undefined ? (data.error || '') : form.dataset.countTemplate.replace('%{count}', data.count.toLocaleString());
+        })
+        .catch(function () { count.textContent = ''; });
+    }
+    form.addEventListener('change', function (event) { if (event.target.name === 'scope_kind') show(); else estimate(); });
+    form.addEventListener('submit', function (event) {
+      var boxes = chosen();
+      if (boxes.length === 0) { alert(form.dataset.noneChosen); event.preventDefault(); return; }
+      var names = boxes.map(function (b) { return b.parentNode.querySelector('.solr-search-partial-name').textContent.trim(); });
+      var message = form.dataset.confirmTemplate.replace('%{targets}', names.join('、')) + (count.textContent ? '\n' + count.textContent : '');
+      if (!confirm(message)) event.preventDefault();
+    });
+    // "Look at the index": the deleted fields are added to the choices without loading the page again
+    var inspect = document.getElementById('solr-search-partial-inspect-form');
+    var result = document.getElementById('solr-search-partial-inspect-result');
+    inspect.addEventListener('submit', function (event) {
+      event.preventDefault();
+      var button = inspect.querySelector('input[type=submit]');
+      button.disabled = true;
+      fetch(inspect.dataset.url, {headers: {Accept: 'application/json'}, credentials: 'same-origin'})
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          result.textContent = '';
+          var note = document.createElement('p');
+          if (data.error) { note.className = 'icon icon-warning'; note.textContent = data.error; result.appendChild(note); return; }
+          // the ones added by an earlier press are replaced
+          Array.prototype.forEach.call(lists.fields.querySelectorAll('label.solr-search-partial-deleted'), function (l) { l.remove(); });
+          if (data.fields.length === 0) { note.className = 'info'; note.textContent = inspect.dataset.none; result.appendChild(note); return; }
+          data.fields.forEach(function (field) {
+            var label = document.createElement('label');
+            label.className = 'inline solr-search-partial-deleted';
+            var box = document.createElement('input');
+            box.type = 'checkbox'; box.name = 'fields[]'; box.value = field.id; box.id = 'solr-search-partial-field-' + field.id;
+            box.disabled = kind() !== 'fields';
+            var name = document.createElement('span');
+            name.className = 'solr-search-partial-name';
+            name.textContent = inspect.dataset.deletedLabel.replace('%{id}', field.id);
+            var info = document.createElement('em');
+            info.className = 'info';
+            info.textContent = ' ' + inspect.dataset.countLabel.replace('%{count}', field.count.toLocaleString());
+            label.appendChild(box); label.appendChild(document.createTextNode(' ')); label.appendChild(name); label.appendChild(info);
+            lists.fields.appendChild(label);
+          });
+          // the choices are in the "custom fields" list: show it, so that the result is seen
+          var radio = form.querySelector('input[name=scope_kind][value=fields]');
+          radio.checked = true; show();
+        })
+        .catch(function (error) { result.textContent = String(error); })
+        .then(function () { button.disabled = false; });
+    });
+    show();
+  })();
+<% end %>

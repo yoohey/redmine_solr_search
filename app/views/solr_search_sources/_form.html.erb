@@ -1,0 +1,223 @@
+<%= error_messages_for 'source' %>
+
+<div class="box tabular">
+  <%# the collection: chosen among Solr's when registering, then fixed (design D-35) %>
+  <% if @source.new_record? %>
+    <p>
+      <label for="solr_search_source_collection"><%= l(:label_solr_search_source_collection) %><span class="required"> *</span></label>
+      <% if @status.answered? %>
+        <%= select_tag 'solr_search_source[collection]',
+                       content_tag('option', '', value: '') +
+                         safe_join(@candidates.map do |c|
+                           text = c.selectable ? c.name : l(:label_solr_search_source_candidate_refused, name: c.name, configset: c.configset)
+                           content_tag('option', text, value: c.name, disabled: !c.selectable, selected: c.name == @source.collection)
+                         end),
+                       id: 'solr_search_source_collection' %>
+        <em class="info"><%= l(:text_solr_search_source_collection_choose) %></em>
+      <% else %>
+        <span class="icon icon-error"><%= solr_search_icon('alert-circle', l(:label_solr_search_source_state_unknown)) %></span>
+        <br><code><%= @status.error %></code>
+      <% end %>
+    </p>
+  <% else %>
+    <p>
+      <label><%= l(:label_solr_search_source_collection) %></label>
+      <code><%= @source.collection %></code>
+      <em class="info"><%= l(:text_solr_search_source_collection_fixed) %></em>
+    </p>
+  <% end %>
+  <p><%= f.text_field :name, required: true, size: 60, label: :field_name %></p>
+  <p>
+    <%= f.text_area :description, rows: 3, cols: 60, label: :field_description %>
+    <em class="info"><%= l(:text_solr_search_source_description) %></em>
+  </p>
+</div>
+
+<%# How its documents are shown in the results (design D-35). The pattern is used for "as a link" only; a field turned
+    off is not sent, so the pattern kept is not lost. %>
+<% sample_paths = @sample_paths || {} %>
+<% current_sample = sample_paths[@source.collection] %>
+<fieldset class="box tabular">
+  <legend><%= l(:label_solr_search_source_display) %></legend>
+  <p id="solr-search-source-path-sample" style="<%= 'display: none;' unless current_sample %>">
+    <label><%= l(:label_solr_search_source_path_sample) %></label>
+    <code id="solr-search-source-sample-raw"><%= current_sample %></code>
+    <span id="solr-search-source-sample-mapped-wrap" style="display: none;">
+      → <code id="solr-search-source-sample-mapped"></code>
+    </span>
+  </p>
+  <p><%= f.text_field :path_from, size: 50, label: :field_path_from, placeholder: l(:label_solr_search_source_path_from_example), id: 'solr_search_source_path_from' %></p>
+  <p>
+    <%= f.text_field :path_to, size: 50, label: :field_path_to, placeholder: l(:label_solr_search_source_path_to_example), id: 'solr_search_source_path_to' %>
+    <em class="info"><%= l(:text_solr_search_source_path_mapping) %></em>
+  </p>
+  <p>
+    <%= f.select :link_format,
+                 SolrSearchSource::LINK_FORMATS.map {|v| [l(:"label_solr_search_link_format_#{v}"), v] },
+                 {label: :field_link_format}, id: 'solr_search_source_link_format' %>
+  </p>
+  <p>
+    <%= f.text_field :link_pattern, size: 80, label: :field_link_pattern,
+                                    placeholder: l(:label_solr_search_source_link_example) %>
+    <em class="info"><%= l(:label_solr_search_source_link_summary) %></em>
+  </p>
+  <details class="solr-search-admin-more">
+    <summary><%= l(:label_solr_search_source_link_details) %></summary>
+    <p><em class="info"><%= l(:text_solr_search_link_pattern) %></em></p>
+    <p><em class="info"><%= l(:text_solr_search_link_attributes) %></em></p>
+    <%# concrete examples (UI review): the pattern for a shared folder, and a script for View Customize %>
+    <p><strong><%= l(:label_solr_search_link_example_pattern) %></strong><br>
+      <em class="info"><%= l(:text_solr_search_link_example_pattern) %></em></p>
+    <%= solr_search_code_block('https://docs.example.com/files/%path_slash%') %>
+    <p><strong><%= l(:label_solr_search_link_example_script) %></strong><br>
+      <em class="info"><%= l(:text_solr_search_link_example_script) %></em></p>
+    <% example_script = [
+      "(function () {",
+      "  function run() {",
+      "    // Go through each external result",
+      "    document.querySelectorAll('.solr-search-external-hit').forEach(function (hit) {",
+      "      // Read the path of the document",
+      "      var path = hit.getAttribute('data-solr-path');",
+      "      // Find the title, where the button goes",
+      "      var title = hit.querySelector('.solr-search-title-external');",
+      "      // Skip it if there is no path or title, or the button is already there",
+      "      if (!path || !title || title.querySelector('button.copy-path') || !navigator.clipboard) return;",
+      "      // Make the button",
+      "      var b = document.createElement('button');",
+      "      b.type = 'button';",
+      "      b.className = 'copy-path';",
+      "      b.textContent = 'Copy path';",
+      "      // Copy the path when it is pressed",
+      "      b.addEventListener('click', function () { navigator.clipboard.writeText(path); });",
+      "      title.appendChild(b);",
+      "    });",
+      "  }",
+      "  run(); // Run when the page loads",
+      "  document.addEventListener('solr-search:updated', run); // Run again when the results are replaced",
+      "})();"
+    ].join("\n") %>
+    <%= solr_search_code_block(example_script, script: true) %>
+  </details>
+</fieldset>
+<style>
+  .solr-search-code-box { position: relative; margin: 0.4em 0 1em; }
+  .solr-search-code { background: transparent; color: #333; border: 1px solid #aaa; padding: 0.6em 0.8em; overflow: auto; margin: 0;
+                      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; line-height: 1.5; tab-size: 2; }
+  .solr-search-code-comment { color: #777; }
+  .solr-search-code-keyword { color: #166b16; font-weight: bold; }
+  .solr-search-code-method, .solr-search-code-function { color: #1a5fb4; font-weight: bold; }
+  .solr-search-code-string { color: #a11; background: rgba(170, 17, 17, 0.08); }
+  .solr-search-code-number { color: #164; }
+  .solr-search-code-copy { position: absolute; top: 0.4em; right: 0.5em; font-size: 0.8em; opacity: 0.85; }
+  /* beside the project's name (Redmine's em.info is a block of its own) */
+  #solr_search_source_project_ids em.info { display: inline; }
+</style>
+<%= javascript_tag do %>
+  $(function() {
+    $('.solr-search-code-copy').on('click', function() {
+      var button = this, code = $(button).siblings('pre').text();
+      if (navigator.clipboard) { navigator.clipboard.writeText(code); }
+    });
+  });
+<% end %>
+<%= javascript_tag do %>
+  $(function() {
+    var format = $('#solr_search_source_link_format'), pattern = $('#solr_search_source_link_pattern');
+    function sync() { pattern.prop('disabled', format.val() !== 'link'); }
+    format.on('change', sync); sync();
+
+    var samples = <%= raw(sample_paths.to_json.gsub('</', '<\\/')) %>;
+    var fixedCollection = <%= raw(@source.new_record? ? 'null' : @source.collection.to_json.gsub('</', '<\\/')) %>;
+    var collectionSelect = $('#solr_search_source_collection');
+    var fromInput = $('#solr_search_source_path_from'), toInput = $('#solr_search_source_path_to');
+    var sampleRow = $('#solr-search-source-path-sample'), rawCode = $('#solr-search-source-sample-raw');
+    var mappedWrap = $('#solr-search-source-sample-mapped-wrap'), mappedCode = $('#solr-search-source-sample-mapped');
+
+    // the rule of SolrSearch::PathMapping.map (lib/solr_search/path_mapping.rb): a change there comes here too
+    function mapPath(path, from, to) {
+      if (!path || !from || !to) { return path; }
+      var head = from.replace(/[\/\\]+$/, '');
+      if (!head || path.indexOf(head) !== 0) { return path; }
+      var rest = path.slice(head.length);
+      if (rest !== '' && rest.charAt(0) !== '/' && rest.charAt(0) !== '\\') { return path; }
+      var sep = (to.indexOf('\\') !== -1 || /^[A-Za-z]:/.test(to)) ? '\\' : '/';
+      return to.replace(/[\/\\]+$/, '') + rest.replace(/[\/\\]/g, sep);
+    }
+
+    function syncSample() {
+      var col = fixedCollection || collectionSelect.val();
+      var raw = col ? samples[col] : null;
+      if (!raw) { sampleRow.hide(); return; }
+      rawCode.text(raw);
+      sampleRow.show();
+      var mapped = mapPath(raw, $.trim(fromInput.val()), $.trim(toInput.val()));
+      if (mapped !== raw) {
+        mappedCode.text(mapped);
+        mappedWrap.show();
+      } else {
+        mappedWrap.hide();
+      }
+    }
+    collectionSelect.on('change', syncSample);
+    fromInput.on('input change', syncSample);
+    toInput.on('input change', syncSample);
+    syncSample();
+  });
+<% end %>
+
+<%# Which projects may link it (design D-34), shown as Redmine shows the projects of a custom field. "All projects"
+    disables the list, and a disabled list is not sent: the chosen projects are kept as they were. %>
+<fieldset class="box">
+  <legend>
+    <%= toggle_checkboxes_link('#solr_search_source_project_ids input[type=checkbox]:enabled') %>
+    <%= l(:label_solr_search_source_linkable) %>
+  </legend>
+  <p>
+    <label>
+      <%= f.check_box :all_projects, no_label: true, data: {disables: '#solr_search_source_project_ids input'} %>
+      <%= l(:label_solr_search_source_all_projects) %>
+    </label>
+  </p>
+  <p><em class="info"><%= l(:text_solr_search_source_linkable) %></em></p>
+  <div id="solr_search_source_project_ids">
+    <% ids = @source.linkable_project_ids %>
+    <% used = @source.new_record? ? [] : @source.projects.to_a %>
+    <% used_ids = used.map(&:id) %>
+    <%= render_project_nested_lists(Project.all) do |p|
+          # safe_join: "' ' + content_tag" is a plain String, so the <em> was escaped and shown as text
+          content_tag('label', safe_join([check_box_tag('solr_search_source[linkable_project_ids][]', p.id, ids.include?(p.id), id: nil),
+                                          ' ', p.to_s,
+                                          (safe_join([' ', content_tag('em', l(:label_solr_search_source_in_use), class: 'info')]) if used_ids.include?(p.id))].compact))
+        end %>
+    <%= hidden_field_tag('solr_search_source[linkable_project_ids][]', '', id: nil) %>
+  </div>
+</fieldset>
+
+<% unless @source.new_record? %>
+  <fieldset class="box">
+    <legend><%= l(:label_solr_search_source_linked) %></legend>
+    <% if @source.projects.any? %>
+      <p><%= safe_join(@source.projects.sort_by(&:name).map {|p| link_to_project(p) }, ', ') %></p>
+    <% else %>
+      <p class="nodata"><%= l(:label_no_data) %></p>
+    <% end %>
+    <p><em class="info"><%= l(:text_solr_search_source_linked) %></em></p>
+  </fieldset>
+<% end %>
+<%# Before the allowance of a project that searches the source is taken away: say so (UI review 2026-10-06, 1). %>
+<% if used.any? %>
+  <%= javascript_tag do %>
+    $(function() {
+      var used = <%= raw(used.to_h {|p| [p.id.to_s, p.name] }.to_json.gsub('</', '<\\/')) %>;
+      var message = <%= raw(l(:text_solr_search_source_unlink_confirm, projects: '__PROJECTS__').to_json.gsub('</', '<\\/')) %>;
+      $('#solr-search-source-form').on('submit', function(e) {
+        if ($('#solr_search_source_all_projects').is(':checked')) { return; }
+        var lost = [];
+        $.each(used, function(id, name) {
+          if (!$('input[name="solr_search_source[linkable_project_ids][]"][value="' + id + '"]').is(':checked')) { lost.push(name); }
+        });
+        if (lost.length && !window.confirm(message.replace('__PROJECTS__', lost.join(', ')))) { e.preventDefault(); }
+      });
+    });
+  <% end %>
+<% end %>

@@ -1,0 +1,49 @@
+<%
+  sources = SolrSearchSource.linkable_by(@project).order(:name).to_a
+  linked_ids = @project.solr_search_project_sources.pluck(:source_id)
+  checks = solr_search_source_checks(sources)
+%>
+
+<h3><%= l(:label_solr_search_project_sources_heading) %></h3>
+<p class="info"><%= l(:text_solr_search_project_sources_hint) %></p>
+
+<%= form_tag(project_solr_search_sources_path(@project), method: :post, id: 'solr-search-project-sources-form') do %>
+  <% if sources.empty? %>
+    <p class="nodata"><%= l(:label_solr_search_project_sources_none_allowed) %></p>
+  <% else %>
+    <table class="list solr-search-project-sources">
+      <thead>
+        <tr>
+          <th class="checkbox"></th>
+          <th><%= l(:field_name) %></th>
+          <th><%= l(:label_solr_search_source_collection) %></th>
+          <th><%= l(:field_status) %></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% sources.each do |source| %>
+          <%
+            check = checks[source.id]
+            is_linked = linked_ids.include?(source.id)
+            selectable = check.nil? || check.state == :ok
+            disabled = !selectable && !is_linked
+          %>
+          <tr id="solr-search-project-source-<%= source.id %>">
+            <td class="checkbox">
+              <%= check_box_tag 'source_ids[]', source.id, is_linked,
+                                disabled: disabled, id: "source_id_#{source.id}" %>
+            </td>
+            <td class="name">
+              <label for="source_id_<%= source.id %>"><strong><%= source.name %></strong></label>
+              <% if source.description.present? %><br><em class="info"><%= source.description %></em><% end %>
+            </td>
+            <td><code><%= source.collection %></code></td>
+            <td><%= solr_search_source_check(check, source) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+    <%= hidden_field_tag 'source_ids[]', '' %>
+    <p><%= submit_tag l(:button_save) %></p>
+  <% end %>
+<% end %>

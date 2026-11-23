@@ -1,0 +1,125 @@
+<%= render partial: 'header', locals: {selected: 'status'} %>
+
+<% if @config_error %>
+  <%# what to do in the page's language; Solr's or the client's own message as a detail (ui 7) %>
+  <div id="errorExplanation">
+    <p><%= l(:text_solr_search_admin_no_solr_url) %></p>
+    <p><code><%= @config_error %></code></p>
+  </div>
+  <%= render partial: 'solr_url', locals: {status: nil} %>
+  <%= render partial: 'tika_url' %>
+<% else %>
+  <%= render partial: 'solr_url', locals: {status: @status} %>
+  <%= render partial: 'tika_url' %>
+
+  <% if @status.ready? %>
+    <h3><%= l(:label_solr_search_admin_counts) %></h3>
+    <table class="list">
+      <thead>
+        <tr>
+          <th><%= l(:label_solr_search_types) %></th>
+          <th><%= l(:label_solr_search_admin_db) %></th>
+          <th><%= l(:label_solr_search_admin_solr) %></th>
+          <th><%= l(:label_solr_search_admin_check) %></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @status.rows.each do |row| %>
+          <tr>
+            <td class="name"><%= solr_search_doc_type_label(row.type) %></td>
+            <td class="solr-search-number"><%= number_with_delimiter(row.db) %></td>
+            <td class="solr-search-number"><%= number_with_delimiter(row.solr) %></td>
+            <td><%= solr_search_admin_warning(l(:label_solr_search_admin_differs)) unless row.db == row.solr %></td>
+          </tr>
+        <% end %>
+      </tbody>
+      <%# the total, to be compared with the replicas' document counts below (UI review 2) %>
+      <tfoot>
+        <tr>
+          <td class="name"><strong><%= l(:label_solr_search_admin_total) %></strong></td>
+          <td class="solr-search-number"><strong><%= number_with_delimiter(@status.rows.sum(&:db)) %></strong></td>
+          <td class="solr-search-number"><strong><%= number_with_delimiter(@status.rows.sum(&:solr)) %></strong></td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+    <p class="info"><%= l(:text_solr_search_admin_counts) %></p>
+    <%= solr_search_admin_note(:text_solr_search_admin_custom_fields) %>
+    <% if @deleted_fields.present? %>
+      <%# values left in the index by custom fields that Redmine no longer has: not found by a search, but kept (D-57) %>
+      <p><%= solr_search_admin_warning(l(:text_solr_search_admin_deleted_fields, ids: @deleted_fields.map {|f| f[:id] }.join(', '),
+                                          issues: number_with_delimiter(@deleted_fields.sum {|f| f[:count] }))) %>
+        <%= link_to l(:label_solr_search_admin_deleted_fields_link), solr_search_admin_reindex_path %></p>
+    <% end %>
+
+    <h3><%= l(:label_solr_search_admin_replicas) %></h3>
+    <% if @status.replicas_error %>
+      <p>
+        <span class="icon icon-error"><%= solr_search_icon('alert-circle', l(:label_solr_search_admin_replicas_error)) %></span>
+        <br><code><%= @status.replicas_error %></code>
+      </p>
+    <% else %>
+    <table class="list">
+      <thead>
+        <tr>
+          <th><%= l(:label_solr_search_admin_core) %></th>
+          <th><%= l(:label_solr_search_admin_node) %></th>
+          <th><%= l(:field_status) %></th>
+          <th><%= l(:label_solr_search_admin_leader) %></th>
+          <th><%= l(:label_solr_search_admin_documents) %></th>
+          <th><%= l(:label_solr_search_admin_newest) %></th>
+          <th><%= l(:label_solr_search_admin_check) %></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @status.replicas.each do |r| %>
+          <tr>
+            <td class="name"><%= r.core %></td>
+            <td><%= r.node %></td>
+            <%# down, recovering ...: marked like the other things to look at (ui 14) %>
+            <td><%= r.state == 'active' ? r.state : solr_search_admin_warning(r.state) %></td>
+            <td><%= r.leader ? l(:general_text_Yes) : '' %></td>
+            <td class="solr-search-number"><%= r.num_docs ? number_with_delimiter(r.num_docs) : '-' %></td>
+            <td><%= r.newest ? format_time(r.newest) : '-' %></td>
+            <%# a replica whose searches see other documents than the others' (a stopped leader ...; Status.flag) %>
+            <td><%= solr_search_admin_warning(l(:"label_solr_search_admin_replica_#{r.flag}")) if r.flag %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+    <% end %>
+    <%= solr_search_admin_note(:text_solr_search_admin_replicas) %>
+  <% end %>
+<% end %>
+
+<h3><%= l(:label_solr_search_admin_scheduler) %></h3>
+<div class="box tabular">
+  <p>
+    <label><%= l(:label_solr_search_admin_scheduler_beat) %></label>
+    <% if @next_runs.values.none? %>
+      <%# every task is off in the settings (cron or the like starts them): no warning to get used to (ui 25) %>
+      <%= l(:label_solr_search_admin_scheduler_unused) %>
+      <% if @heartbeat&.beat_at %>
+        <em class="info"><%= l(:label_solr_search_admin_scheduler_beat_at, time: format_time(@heartbeat.beat_at),
+                                ago: distance_of_time_in_words(Time.current, @heartbeat.beat_at)) %></em>
+      <% end %>
+    <% elsif @heartbeat&.beat_at %>
+      <span class="icon <%= @heartbeat.silent? ? 'icon-warning' : 'icon-ok' %>">
+        <%= solr_search_icon(@heartbeat.silent? ? 'alert-circle' : 'checked',
+                             l(:label_solr_search_admin_scheduler_beat_at,
+                               time: format_time(@heartbeat.beat_at),
+                               ago: distance_of_time_in_words(Time.current, @heartbeat.beat_at))) %>
+      </span>
+      <em class="info"><%= @heartbeat.info %><%= ", #{l(:label_solr_search_admin_scheduler_started, time: format_time(@heartbeat.started_at))}" if @heartbeat.started_at %></em>
+    <% else %>
+      <span class="icon icon-warning"><%= solr_search_icon('alert-circle', l(:label_solr_search_admin_scheduler_never)) %></span>
+    <% end %>
+    <% if @next_runs.values.any? && (@heartbeat.nil? || @heartbeat.silent?) %>
+      <%= solr_search_admin_note(:text_solr_search_admin_scheduler_silent) %>
+    <% end %>
+  </p>
+</div>
+
+<%= render partial: 'run_history' %>
+
+<% html_title(l(:label_administration), l(:label_solr_search_admin_title)) -%>

@@ -1,0 +1,168 @@
+<%= render partial: 'header', locals: {selected: 'log'} %>
+
+<%= solr_search_admin_note(:text_solr_search_log) %>
+
+<div id="solr-search-log-main">
+<div class="box">
+  <p class="solr-search-log-period">
+    <strong><%= l(:label_solr_search_log_period) %></strong>:
+    <% [0, *SolrSearchLogController::LOG_PERIODS].each do |days| %>
+      <% label = days.zero? ? l(:label_solr_search_log_period_all) : l(:label_solr_search_log_period_days, days: days) %>
+      <%= days == @days ? content_tag('strong', label) : link_to(label, solr_search_admin_log_path(days: days, q: @query_filter.presence, zero: (@only_zero ? '1' : nil), noclick: (@only_noclick ? '1' : nil))) %>
+    <% end %>
+  </p>
+  <% percent = @totals[:searches].zero? ? '-' : number_to_percentage(@totals[:zero] * 100.0 / @totals[:searches], precision: 1) %>
+  <p class="solr-search-log-totals"><%= l(:label_solr_search_log_totals, searches: @totals[:searches], zero: @totals[:zero], percent: percent, failed: @totals[:failed]) %></p>
+  <% if @totals[:found].positive? %>
+    <% pct = ->(n) { number_to_percentage(n * 100.0 / @totals[:found], precision: 1) } %>
+    <p class="solr-search-log-totals"><%= l(:label_solr_search_log_clicked_totals, found: @totals[:found], clicked: @totals[:clicked], clicked_percent: pct.(@totals[:clicked]),
+                                                    noclick: @totals[:found] - @totals[:clicked], noclick_percent: pct.(@totals[:found] - @totals[:clicked])) %></p>
+  <% end %>
+  <%= form_tag solr_search_admin_log_path, method: :get do %>
+    <%= hidden_field_tag 'days', @days, id: nil %>
+    <label for="solr_search_log_q"><%= l(:label_solr_search_log_query) %></label>
+    <%= text_field_tag 'q', @query_filter, id: 'solr_search_log_q', size: 30 %>
+    <label class="inline"><%= check_box_tag 'zero', '1', @only_zero, id: 'solr_search_log_zero' %> <%= l(:label_solr_search_log_only_zero) %></label>
+    <label class="inline"><%= check_box_tag 'noclick', '1', @only_noclick, id: 'solr_search_log_noclick' %> <%= l(:label_solr_search_log_only_noclick) %></label>
+    <%= submit_tag l(:button_solr_search_log_filter), name: nil, data: {disable_with: false} %>
+  <% end %>
+</div>
+
+<div class="splitcontent">
+  <% [[:label_solr_search_log_top_zero, @top_zero], [:label_solr_search_log_top_noclick, @top_noclick]].each do |title, rows| %>
+    <div class="splitcontentleft">
+      <h3><%= l(title, count: SolrSearchLog::TOP) %></h3>
+      <%= render partial: 'log_top', locals: {rows: rows} %>
+    </div>
+  <% end %>
+</div>
+<div class="splitcontent">
+  <div class="splitcontentleft">
+    <h3><%= l(:label_solr_search_log_top_queries, count: SolrSearchLog::TOP) %></h3>
+    <%= render partial: 'log_top', locals: {rows: @top_queries} %>
+  </div>
+  <div class="splitcontentleft">
+    <h3><%= l(:label_solr_search_log_top_opened, count: SolrSearchLog::TOP) %></h3>
+    <% if @top_opened.empty? %>
+      <p class="nodata"><%= l(:label_no_data) %></p>
+    <% else %>
+      <table class="list">
+        <thead><tr><th><%= l(:label_solr_search_log_opened) %></th><th><%= l(:label_solr_search_log_times) %></th></tr></thead>
+        <tbody>
+          <% @top_opened.each do |group_id, times| %>
+            <tr>
+              <td class="name"><%= @opened_titles[group_id].presence || group_id %> <small class="info"><%= group_id %></small></td>
+              <td class="solr-search-number"><%= times %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    <% end %>
+  </div>
+</div>
+
+<div id="solr-search-log-list">
+  <%= render partial: 'log_list' %>
+</div>
+</div>
+<%# Without a reload (the page stays where it is): the filter button and the period links
+    load the page in the background and replace the figures and the list; the page links change the list only (the server
+    sends the list alone when the request is made by script: request.xhr?). Without JavaScript, or when a request fails, they
+    work as plain links and a plain form. %>
+<%= javascript_tag do %>
+  (function () {
+    var main = document.getElementById('solr-search-log-main');
+    if (!main || !window.fetch || !window.DOMParser) return;
+    function busy(on) { main.style.opacity = on ? '0.5' : ''; }
+    // the page at url, whose figures, list and form are put in place of the present ones (the form comes back with the words
+    // that were sent: the server writes them into it)
+    function reload(url) {
+      busy(true);
+      return fetch(url, {credentials: 'same-origin'})
+        .then(function (res) { if (!res.ok) throw new Error(res.status); return res.text(); })
+        .then(function (html) {
+          var fresh = new DOMParser().parseFromString(html, 'text/html').getElementById('solr-search-log-main');
+          if (!fresh) throw new Error('no area');
+          main.innerHTML = fresh.innerHTML;
+          // Rails disables a submit button when its form is submitted, and only the page that follows undoes it
+          main.querySelectorAll('input[type=submit]').forEach(function (b) { b.disabled = false; });
+          history.replaceState(null, '', url);
+          busy(false);
+        })
+        .catch(function () { window.location = url; });
+    }
+    main.addEventListener('click', function (event) {
+      if (event.ctrlKey || event.metaKey || event.shiftKey) return;
+      var page = event.target.closest('#solr-search-log-list .pagination a');
+      var period = event.target.closest('.solr-search-log-period a');
+      if (page) {
+        event.preventDefault();
+        var box = document.getElementById('solr-search-log-list');
+        busy(true);
+        fetch(page.href, {headers: {'X-Requested-With': 'XMLHttpRequest'}, credentials: 'same-origin'})
+          .then(function (res) { if (!res.ok) throw new Error(res.status); return res.text(); })
+          .then(function (html) {
+            box.innerHTML = html;
+            history.replaceState(null, '', page.href);
+            box.scrollIntoView({block: 'start'});
+            busy(false);
+          })
+          .catch(function () { window.location = page.href; });
+      } else if (period) {
+        event.preventDefault();
+        reload(period.href);
+      }
+    });
+    main.addEventListener('submit', function (event) {
+      var form = event.target;
+      if (form.tagName !== 'FORM' || (form.method || '').toLowerCase() !== 'get') return;
+      event.preventDefault();
+      var params = new URLSearchParams(new FormData(form));
+      reload(form.action + '?' + params.toString());
+    });
+  })();
+<% end %>
+
+<%# For work by hand (Power Query ...): a zip of CSV files, with the conditions that the list has now (design D-45) %>
+<h3><%= l(:label_solr_search_log_export) %></h3>
+<div class="box">
+  <p class="info"><%= l(:text_solr_search_log_export) %></p>
+  <p><%= link_to l(:button_solr_search_log_export),
+                 solr_search_admin_log_export_path(days: @days, q: @query_filter.presence, zero: (@only_zero ? '1' : nil), noclick: (@only_noclick ? '1' : nil)),
+                 class: 'icon icon-download' %></p>
+</div>
+
+<%# Deleted only by an administrator's own act, never by itself (design D-45) %>
+<h3><%= l(:label_solr_search_log_delete) %></h3>
+<div class="box">
+  <p class="info"><%= l(:text_solr_search_log_delete) %></p>
+  <%= form_tag solr_search_admin_delete_log_path, method: :delete do %>
+    <label for="solr_search_log_before"><%= l(:label_solr_search_log_delete_before) %></label>
+    <%# required: the page stops an empty day before the question is asked (M6 review 14) %>
+    <%= date_field_tag 'before', nil, id: 'solr_search_log_before', required: true %>
+    <%= submit_tag l(:button_solr_search_log_delete_before), data: {confirm: l(:text_solr_search_log_delete_before_confirm)} %>
+  <% end %>
+</div>
+
+<%# Apart from the one above, under a heading of its own: it takes the whole log, which is what the synonym work is made from,
+    and cannot be brought back. The question says so and points at the download (M6 review 5). %>
+<h3><%= l(:label_solr_search_log_delete_all_heading) %></h3>
+<div class="box">
+  <p class="info"><%= l(:text_solr_search_log_delete_all) %></p>
+  <%= form_tag solr_search_admin_delete_log_path, method: :delete do %>
+    <%= hidden_field_tag 'all', '1', id: nil %>
+    <%= submit_tag l(:button_solr_search_log_delete_all), class: 'icon icon-del',
+                   data: {confirm: l(:text_solr_search_log_delete_all_confirm, count: SolrSearchLog.count)} %>
+  <% end %>
+</div>
+
+<% content_for :header_tags do %>
+  <style>
+    table.list td.solr-search-number { text-align: right; }
+    table.solr-search-log tr.solr-search-log-zero td { background: #ffe8cc; }
+    table.solr-search-log td.name { word-break: break-all; }
+    p.solr-search-log-totals { font-size: 1.1em; margin: 0.3em 0; }
+  </style>
+<% end %>
+
+<% html_title(l(:label_administration), l(:label_solr_search_admin_title), l(:label_solr_search_admin_tab_log)) -%>

@@ -1,0 +1,39 @@
+<%# The trial search and the check without a reload: the form is posted in the background (as the page would post it, with do=preview
+    or do=validate) and only the area of that button (#preview-area, #validate-area) of the answer replaces the one on the page.
+    Without JavaScript, or when the request fails, the form posts as always (the page opens at #result). Used by the fine tuning
+    tab and the dictionary tab. %>
+<script>
+  (function () {
+    var form = document.querySelector('form.solr-search-tuning, form.solr-search-synonyms');
+    if (!form || !window.fetch || !window.DOMParser) { return; }
+    var areas = {preview: 'preview-area', validate: 'validate-area'};
+    form.addEventListener('submit', function (event) {
+      var submitter = event.submitter;
+      var id = submitter && areas[submitter.value];
+      var area = id && document.getElementById(id);
+      if (!area) { return; }
+      event.preventDefault();
+      var data = new FormData(form);
+      data.set('do', submitter.value);
+      submitter.disabled = true;
+      area.style.opacity = '0.5';
+      fetch(form.action, {method: 'POST', body: data, credentials: 'same-origin', headers: {'X-Requested-With': 'XMLHttpRequest'}})
+        .then(function (response) { return response.text(); })
+        .then(function (html) {
+          var fresh = new DOMParser().parseFromString(html, 'text/html').getElementById(id);
+          if (!fresh) { throw new Error('no area'); }
+          area.replaceWith(fresh);
+          submitter.disabled = false;
+        })
+        .catch(function () {
+          // the page's own way: a reload (form.submit() does not send the button, so say what it was)
+          var again = document.createElement('input');
+          again.type = 'hidden';
+          again.name = 'do';
+          again.value = submitter.value;
+          form.appendChild(again);
+          form.submit();
+        });
+    });
+  })();
+</script>

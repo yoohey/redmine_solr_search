@@ -1,0 +1,9 @@
+<%# The last run of each task and the latest runs: on the status tab and on the index tab (the reindexes are runs too) %>
+<h3><%= l(:label_solr_search_admin_last_runs) %></h3>
+<%= render partial: 'runs', locals: {runs: @last_runs, next_runs: @next_runs} %>
+<%= solr_search_admin_note(:text_solr_search_admin_last_runs) %>
+
+<% if @recent_runs.any? %>
+  <h3><%= l(:label_solr_search_admin_recent_runs, count: @recent_runs.size) %></h3>
+  <%= render partial: 'runs', locals: {runs: @recent_runs.map {|run| [run.task, run]}} %>
+<% end %>

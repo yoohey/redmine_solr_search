@@ -1,0 +1,131 @@
+<%= render partial: 'header', locals: {selected: 'sources', extra: link_to(solr_search_icon('add', l(:label_solr_search_source_new)), new_solr_search_source_path, class: 'icon icon-add')} %>
+
+<% if @config_error %>
+  <div id="errorExplanation">
+    <p><%= l(:text_solr_search_admin_no_solr_url) %></p>
+    <p><code><%= @config_error %></code></p>
+  </div>
+<% elsif @solr_error %>
+  <p>
+    <span class="icon icon-error"><%= solr_search_icon('alert-circle', l(:label_solr_search_admin_not_connected)) %></span>
+    <br><code><%= @solr_error %></code>
+  </p>
+<% end %>
+
+<% if @sources.blank? %>
+  <%# what to do first, as steps (the long explanation is folded below) %>
+  <div class="nodata solr-search-none">
+    <p><%= l(:text_solr_search_sources_none) %></p>
+    <ol>
+      <li><%= l(:text_solr_search_sources_step1) %></li>
+      <li><%= l(:text_solr_search_sources_step2) %></li>
+      <li><%= l(:text_solr_search_sources_step3) %></li>
+    </ol>
+  </div>
+<% else %>
+  <%# a box that narrows the rows as one types, without a request (the list gets long; UI review 5): it matches the name
+      and the names of the projects in use (not the description: a word like "trial" would hit every row) %>
+  <p class="solr-search-source-filter">
+    <%= text_field_tag 'source_filter', '', id: 'solr_search_source_filter', size: 40, type: 'search', autocomplete: 'off',
+                       placeholder: l(:placeholder_solr_search_source_filter), 'aria-label': l(:placeholder_solr_search_source_filter) %>
+    <span class="info" id="solr_search_source_filter_count"></span>
+  </p>
+  <table class="list solr-search-sources">
+    <thead>
+      <tr>
+        <th><%= l(:field_name) %></th>
+        <th><%= l(:label_solr_search_source_collection) %></th>
+        <th><%= l(:label_solr_search_source_linkable) %></th>
+        <th><%= l(:label_solr_search_source_linked) %></th>
+        <th><%= l(:field_status) %></th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <% @sources.each do |source| %>
+        <tr id="solr-search-source-<%= source.id %>"
+            data-search="<%= [source.name, *source.projects.map(&:name)].join(' ').downcase %>">
+          <td class="name">
+            <%= link_to source.name, edit_solr_search_source_path(source) %>
+            <% if source.description.present? %><br><em class="info"><%= source.description %></em><% end %>
+          </td>
+          <td><code><%= source.collection %></code></td>
+          <td><%= solr_search_source_linkable(source) %></td>
+          <td class="solr-search-linked"><%= safe_join(source.projects.sort_by(&:name).map {|p| link_to_project(p) }, ', ') %></td>
+          <td><%= solr_search_source_check(@checks && @checks[source.id], source) %></td>
+          <td class="buttons">
+            <%= link_to solr_search_icon('time', l(:label_solr_search_source_changes)),
+                        solr_search_admin_changes_path(source_id: source.id), class: 'icon icon-time' %>
+            <%= link_to solr_search_icon('del', l(:button_delete)), solr_search_source_path(source),
+                        method: :delete, data: {confirm: solr_search_source_delete_confirm(source)},
+                        class: 'icon icon-del' %>
+          </td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+<% end %>
+<% if @sources.present? %>
+  <p class="info"><%= l(:text_solr_search_sources_archived) %></p>
+<% end %>
+<% if @sources.present? %>
+  <%= javascript_tag do %>
+    (function() {
+      var box = document.getElementById('solr_search_source_filter');
+      var count = document.getElementById('solr_search_source_filter_count');
+      var rows = document.querySelectorAll('table.solr-search-sources tbody tr');
+      var total = <%= @sources.size %>;
+      function apply() {
+        var words = box.value.toLowerCase().split(/\s+/).filter(Boolean);
+        var shown = 0;
+        rows.forEach(function(row) {
+          var text = row.getAttribute('data-search');
+          var hit = words.every(function(w) { return text.indexOf(w) !== -1; });
+          row.style.display = hit ? '' : 'none';
+          if (hit) shown++;
+        });
+        count.textContent = words.length ? <%= raw l(:text_solr_search_source_filter_count).to_json.gsub('%{shown}', '" + shown + "').gsub('%{total}', '" + total + "') %> : '';
+      }
+      // not while a Japanese (or other) input is being composed: the list would vanish before the characters are confirmed
+      box.addEventListener('input', function(e) { if (!e.isComposing) apply(); });
+      box.addEventListener('compositionend', apply);
+    })();
+  <% end %>
+<% end %>
+<%= solr_search_admin_note(:text_solr_search_sources) %>
+
+<%# Solr's collections that are no source yet (design D-35): a source is registered by choosing one %>
+<% if @candidates.present? %>
+  <h3><%= l(:label_solr_search_source_candidates) %></h3>
+  <table class="list solr-search-candidates">
+    <thead>
+      <tr>
+        <th><%= l(:label_solr_search_source_collection) %></th>
+        <th><%= l(:label_solr_search_source_configset) %></th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <% @candidates.each do |c| %>
+        <tr id="solr-search-candidate-<%= c.name %>">
+          <%# centred like its heading (Redmine centres th; td.name would be left-aligned) %>
+          <td><code><%= c.name %></code></td>
+          <td><%= c.configset %></td>
+          <td class="buttons">
+            <% if c.selectable %>
+              <%= link_to solr_search_icon('add', l(:label_solr_search_source_register)), new_solr_search_source_path(collection: c.name),
+                          class: 'icon icon-add' %>
+            <% else %>
+              <span class="info"><%= l(:label_solr_search_source_candidate_not_src) %></span>
+            <% end %>
+          </td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+  <p class="info"><%= l(:text_solr_search_source_candidates) %></p>
+<% elsif !@solr_error && !@config_error %>
+  <p class="nodata"><%= l(:text_solr_search_sources_no_candidates) %></p>
+<% end %>
+
+<% html_title(l(:label_administration), l(:label_solr_search_admin_title), l(:label_solr_search_admin_tab_sources)) -%>

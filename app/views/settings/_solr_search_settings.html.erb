@@ -1,0 +1,175 @@
+<%# Plugin settings (Administration > Plugins > Configure; design D-28). An unticked box sends the hidden '0'.
+    Grouped by where they take effect: the search screen, the crawl, the admin page (M1 review, ui 9). The numbers
+    shown are the ones in use (a saved 0 that is used as 1 shows as 1; ui 27). %>
+<p class="info"><%= t(:text_solr_search_settings_status_html, link: link_to(l(:label_solr_search_admin_page), solr_search_admin_path)) %></p>
+
+<%# What the admin page edits (the Solr address, the collection, the fine tuning tab: the three, the reranker; D-43, D-44, D-51, D-56): not
+    edited here, but sent back, because saving this screen replaces the whole hash. The list is SolrSearch::Settings::ADMIN_PAGE_KEYS. %>
+<% SolrSearch::Settings.admin_page_values.each do |name, value| %>
+  <%= hidden_field_tag "settings[#{name}]", value, id: nil %>
+<% end %>
+
+<fieldset class="box tabular">
+<legend><%= l(:label_solr_search_settings_search) %></legend>
+<p class="info"><%= t(:text_solr_search_settings_fine_tuning_html, link: link_to(l(:label_solr_search_admin_tab_tuning), solr_search_admin_tuning_path)) %></p>
+<p role="group" aria-labelledby="settings_global_search_access_label">
+  <label id="settings_global_search_access_label"><%= l(:setting_solr_search_global_search_access) %></label>
+  <% %w[all logged with_permission].each do |value| %>
+    <label class="inline">
+      <%= radio_button_tag('settings[global_search_access]', value, SolrSearch.global_search_access == value,
+                           id: "settings_global_search_access_#{value}") %>
+      <%= l(:"label_solr_search_global_search_access_#{value}") %>
+    </label><br>
+  <% end %>
+  <em class="info"><%= safe_join(l(:text_solr_search_global_search_access).split("\n\n"), tag.br + tag.br) %></em>
+</p>
+<p>
+  <label for="settings_max_words"><%= l(:setting_solr_search_max_words) %></label>
+  <%= number_field_tag 'settings[max_words]', SolrSearch::Settings.max_words,
+                       min: SolrSearch::Settings::MAX_WORDS.min, max: SolrSearch::Settings::MAX_WORDS.max, step: 1, size: 4,
+                       id: 'settings_max_words' %>
+  <em class="info"><%= l(:text_solr_search_max_words, min: SolrSearch::Settings::MAX_WORDS.min,
+                                                     max: SolrSearch::Settings::MAX_WORDS.max) %></em>
+</p>
+<p>
+  <label for="settings_per_page"><%= l(:setting_solr_search_per_page) %></label>
+  <%= number_field_tag 'settings[per_page]', SolrSearch::Settings.per_page,
+                       min: SolrSearch::Settings::PER_PAGE.min, max: SolrSearch::Settings::PER_PAGE.max, step: 1, size: 4,
+                       id: 'settings_per_page' %>
+  <em class="info"><%= l(:text_solr_search_per_page, min: SolrSearch::Settings::PER_PAGE.min,
+                                                     max: SolrSearch::Settings::PER_PAGE.max,
+                                                     reach: SolrSearch::Searcher::MAX_REACH) %></em>
+</p>
+<p>
+  <label for="settings_search_timeout"><%= l(:setting_solr_search_search_timeout) %></label>
+  <%= number_field_tag 'settings[search_timeout]', SolrSearch::Settings.seconds('search_timeout'), min: 1, step: 1, size: 6,
+                       id: 'settings_search_timeout' %>
+  <%= l(:label_solr_search_seconds) %>
+  <em class="info"><%= l(:text_solr_search_search_timeout) %></em>
+</p>
+</fieldset>
+
+<%# The attachments (design D-47): which files have their text made, and the limits. What is in use is shown as parsed
+    (what is not written like an extension is said, and so is an archive in the list). %>
+<% in_use = SolrSearch::Settings.attachment_extensions %>
+<% ignored = SolrSearch::Settings.attachment_extensions_ignored %>
+<% archives = in_use & SolrSearch::AttachmentText::ARCHIVE_EXTENSIONS %>
+<fieldset class="box tabular">
+<legend><%= l(:label_solr_search_settings_attachments) %></legend>
+<p>
+  <label for="settings_attachment_extensions"><%= l(:setting_solr_search_attachment_extensions) %></label>
+  <%= text_area_tag 'settings[attachment_extensions]', SolrSearch::Settings['attachment_extensions'],
+                    id: 'settings_attachment_extensions', rows: 3, cols: 60 %>
+  <br><em class="info"><%= l(:text_solr_search_attachment_extensions) %></em>
+  <br><em class="info"><%= l(:text_solr_search_attachment_extensions_default, list: SolrSearch::AttachmentText::DEFAULT_EXTENSIONS.join(' ')) %></em>
+  <br><em class="info"><%= l(:text_solr_search_attachment_extensions_in_use, list: in_use.join(' ')) %></em>
+  <% if ignored.any? %>
+    <br><span class="icon icon-warning"><%= solr_search_icon('warning', l(:text_solr_search_attachment_extensions_ignored, list: ignored.join(' '))) %></span>
+  <% end %>
+  <% if archives.any? %>
+    <br><span class="icon icon-warning"><%= solr_search_icon('warning', l(:text_solr_search_attachment_extensions_archive_warning, list: archives.join(' '))) %></span>
+  <% end %>
+</p>
+<p>
+  <label for="settings_attachment_max_file_mb"><%= l(:setting_solr_search_attachment_max_file_mb) %></label>
+  <%= number_field_tag 'settings[attachment_max_file_mb]', SolrSearch::Settings.attachment_max_file_bytes / 1_048_576,
+                       min: SolrSearch::Settings::ATTACHMENT_FILE_MB.min, max: SolrSearch::Settings::ATTACHMENT_FILE_MB.max, step: 1, size: 5,
+                       id: 'settings_attachment_max_file_mb' %>
+  <%= l(:label_solr_search_megabytes) %>
+  <em class="info"><%= l(:text_solr_search_attachment_max_file_mb, min: "#{SolrSearch::Settings::ATTACHMENT_FILE_MB.min}MB", max: "#{SolrSearch::Settings::ATTACHMENT_FILE_MB.max}MB") %></em>
+</p>
+<p>
+  <label for="settings_attachment_max_text_mb"><%= l(:setting_solr_search_attachment_max_text_mb) %></label>
+  <%= number_field_tag 'settings[attachment_max_text_mb]', SolrSearch::Settings.attachment_max_text_bytes / 1_048_576,
+                       min: SolrSearch::Settings::ATTACHMENT_TEXT_MB.min, max: SolrSearch::Settings::ATTACHMENT_TEXT_MB.max, step: 1, size: 5,
+                       id: 'settings_attachment_max_text_mb' %>
+  <%= l(:label_solr_search_megabytes) %>
+  <em class="info"><%= l(:text_solr_search_attachment_max_text_mb, min: "#{SolrSearch::Settings::ATTACHMENT_TEXT_MB.min}MB", max: "#{SolrSearch::Settings::ATTACHMENT_TEXT_MB.max}MB") %></em>
+</p>
+<p><em class="info"><%= l(:text_solr_search_attachment_settings_note) %></em></p>
+</fieldset>
+
+<%# the crawl scheduler (design D-22): each task on or off, every <number> <unit> %>
+<fieldset class="box tabular">
+<legend><%= l(:label_solr_search_schedule) %></legend>
+<%# one box for cron and the like (UI review 12): it is on when every task below is off, and turning it on/off turns them
+    off/on; it is not saved by itself (the four boxes are), which is also what the status tab reads as "scheduler unused" %>
+<p>
+  <label for="solr_search_schedule_none"><%= l(:label_solr_search_schedule_none) %></label>
+  <%= check_box_tag 'solr_search_schedule_none', '1',
+                    SolrSearch::Scheduler::TASKS.none? {|task| SolrSearch::Settings["schedule_#{task}_enabled"] == '1' },
+                    id: 'solr_search_schedule_none' %>
+  <em class="info"><%= l(:text_solr_search_schedule_none) %></em>
+</p>
+<% SolrSearch::Scheduler::TASKS.each do |task| %>
+  <% key = "schedule_#{task}" %>
+  <p>
+    <label for="settings_<%= key %>_enabled"><%= l(:"label_solr_search_run_task_#{task}") %></label>
+    <%= hidden_field_tag "settings[#{key}_enabled]", '0', id: nil %>
+    <%= check_box_tag "settings[#{key}_enabled]", '1', SolrSearch::Settings["#{key}_enabled"] == '1',
+                      id: "settings_#{key}_enabled", class: 'solr-search-schedule-enabled' %>
+    <%# "☑ [10] [分] ごとに動かす" read as a sentence; the words around the numbers toggle the box (ui 10) %>
+    <% if (before = l(:label_solr_search_schedule_before)).present? %>
+      <label for="settings_<%= key %>_enabled" class="inline"><%= before %></label>
+    <% end %>
+    <%= number_field_tag "settings[#{key}_every]", [SolrSearch::Settings["#{key}_every"].to_i, 1].max, min: 1, step: 1,
+                         size: 4, id: "settings_#{key}_every", 'aria-label': l(:label_solr_search_schedule_every) %>
+    <%= select_tag "settings[#{key}_unit]",
+                   options_for_select(SolrSearch::Settings::INTERVAL_UNITS.map {|u| [l(:"label_solr_search_unit_#{u}"), u]},
+                                      SolrSearch::Settings["#{key}_unit"]),
+                   id: "settings_#{key}_unit", 'aria-label': l(:label_solr_search_schedule_unit) %>
+    <% if (after = l(:label_solr_search_schedule_after)).present? %>
+      <label for="settings_<%= key %>_enabled" class="inline"><%= after %></label>
+    <% end %>
+    <%# what the task does, so that its interval can be chosen (ui 11) %>
+    <em class="info"><%= l(:"text_solr_search_run_task_#{task}") %></em>
+  </p>
+<% end %>
+<p><em class="info"><%= l(:text_solr_search_schedule) %></em></p>
+<p>
+  <label for="settings_run_retention_days"><%= l(:setting_solr_search_run_retention_days) %></label>
+  <%= number_field_tag 'settings[run_retention_days]', [SolrSearch::Settings['run_retention_days'].to_i, 0].max,
+                       min: 0, step: 1, size: 6, id: 'settings_run_retention_days' %>
+  <%= l(:label_day_plural) %>
+  <em class="info"><%= l(:text_solr_search_run_retention_days) %></em>
+</p>
+</fieldset>
+
+<fieldset class="box tabular">
+<legend><%= l(:label_solr_search_settings_admin) %></legend>
+<p>
+  <label for="settings_admin_timeout"><%= l(:setting_solr_search_admin_timeout) %></label>
+  <%= number_field_tag 'settings[admin_timeout]', SolrSearch::Settings.seconds('admin_timeout'), min: 1, step: 1, size: 6,
+                       id: 'settings_admin_timeout' %>
+  <%= l(:label_solr_search_seconds) %>
+  <em class="info"><%= l(:text_solr_search_admin_timeout) %></em>
+</p>
+</fieldset>
+
+<%= javascript_tag do %>
+  $(function() {
+    var boxes = $('.solr-search-schedule-enabled');
+    // a task that is off: its interval is greyed out
+    function toggle(box) {
+      $(box).closest('p').find('input[type=number], select').prop('disabled', !box.checked);
+    }
+    var none = $('#solr_search_schedule_none');
+    function syncNone() { none.prop('checked', boxes.filter(':checked').length === 0); }
+    boxes.each(function() { toggle(this); }).on('change', function() { toggle(this); syncNone(); });
+    // cron and the like: all the tasks off; back from it: all on
+    none.on('change', function() {
+      boxes.prop('checked', !this.checked).each(function() { toggle(this); });
+    });
+    boxes.closest('form').on('submit', function() {
+      // disabled fields are not sent, and the settings are saved as a whole: without this, the interval of a task
+      // that is off would be lost and come back as the default
+      boxes.closest('p').find('input, select').prop('disabled', false);
+      // the interval of a task that is off was not checked by the browser (it was disabled): below 1 (or empty), it is
+      // saved as 1, the value that is used anyway (M1 review, ui 27)
+      boxes.closest('p').find('input[type=number][min]').each(function() {
+        var min = Number(this.min);
+        if (this.value === '' || Number(this.value) < min) { this.value = min; }
+      });
+    });
+  });
+<% end %>

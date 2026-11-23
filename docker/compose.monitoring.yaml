@@ -1,0 +1,76 @@
+# Monitoring, with either Solr (compose.solr.yaml or compose.solrcloud.yaml): Prometheus, Grafana (a dashboard in
+# Japanese), the Solr exporter (replica states, from ZooKeeper) and the blackbox exporter (are the screens up).
+# Grafana: http://localhost:3001/
+# (admin / GRAFANA_ADMIN_PASSWORD). Redmine's own numbers (the scheduler, the crawls, the searches) are read with the
+# token METRICS_TOKEN, which Redmine is given too (compose.redmine.yaml); without Redmine here, those panels stay empty.
+services:
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+    depends_on:
+      solr: { condition: service_started }
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+      - --storage.tsdb.retention.size=2GB   # whichever comes first
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    configs:
+      - source: metrics_token
+        target: /etc/prometheus/metrics_token
+
+  solr-exporter:
+    image: solr:9.10.1   # the same image as the nodes; only its exporter is used
+    restart: unless-stopped
+    # inside the network of the service "solr": the one Solr's embedded ZooKeeper listens on localhost there only; with
+    # SolrCloud, "solr" is the nginx in front and the ZooKeeper nodes are found by their names from there too
+    network_mode: "service:solr"
+    depends_on:
+      solr: { condition: service_healthy }
+      solr-init: { condition: service_completed_successfully }
+    # only the exporter runs here; as in solr-init, no unnamed volume for the image's /var/solr
+    tmpfs: ["/var/solr:uid=8983,gid=8983,mode=0770"]
+    environment:
+      JAVA_HEAP: 128m
+    entrypoint:
+      - bash
+      - -c
+      - |
+        if getent hosts zoo1 > /dev/null; then zk=zoo1:2181,zoo2:2181,zoo3:2181; else zk=localhost:9983; fi
+        echo "ZooKeeper: $$zk"
+        exec /opt/solr/prometheus-exporter/bin/solr-exporter -p 9854 -z "$$zk" -f /opt/solr-exporter/solr-exporter-config.xml -n 2 -s 15
+    volumes:
+      - ./monitoring/solr-exporter-config.xml:/opt/solr-exporter/solr-exporter-config.xml:ro
+
+  blackbox:
+    image: prom/blackbox-exporter:v0.27.0
+    restart: unless-stopped
+    command: [--config.file=/etc/blackbox/blackbox.yml]
+    volumes:
+      - ./monitoring/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    restart: unless-stopped
+    depends_on: [prometheus]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_SERVER_ROOT_URL: http://localhost:${GRAFANA_PORT:-3001}/
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3001}:3000"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+
+configs:
+  metrics_token:
+    content: ${METRICS_TOKEN:-change-me-metrics-token}
+
+volumes:
+  prometheus-data:
+  grafana-data:

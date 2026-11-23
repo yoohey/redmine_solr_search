@@ -1,0 +1,8 @@
+<h2><%= link_to l(:label_solr_search_admin_tab_sources), solr_search_admin_sources_path %> &#187; <%= @source.name_was %></h2>
+
+<%= labelled_form_for :solr_search_source, @source, url: solr_search_source_path(@source), html: {method: :patch, id: 'solr-search-source-form'} do |f| %>
+  <%= render partial: 'form', locals: {f: f} %>
+  <%= submit_tag l(:button_save) %>
+<% end %>
+
+<% html_title(l(:label_administration), l(:label_solr_search_admin_tab_sources), @source.name_was) -%>

@@ -1,0 +1,2051 @@
+{
+ "uid": "redmine-solr-overview",
+ "title": "Redmine Solr 検索の概況",
+ "schemaVersion": 39,
+ "version": 1,
+ "refresh": "15s",
+ "time": {
+  "from": "now-30m",
+  "to": "now"
+ },
+ "tags": [
+  "redmine-solr"
+ ],
+ "panels": [
+  {
+   "id": 100,
+   "title": "サービスの状態",
+   "type": "row",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 7,
+   "title": "サービスの稼働状況（Redmine・Solr・Tika・ManifoldCF）",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 1,
+    "w": 24,
+    "h": 4
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 1
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "Down"
+        },
+        "1": {
+         "text": "Up"
+        }
+       }
+      }
+     ]
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "probe_success{job=\"probe\"}",
+     "legendFormat": "{{service}}"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "up{job=\"solr\"}",
+     "legendFormat": "solr {{instance}}"
+    }
+   ],
+   "description": "各サービスに、外から問い合わせて答えがあるかです。「Down」なら、そのサービスが落ちています。まず docker compose ps と docker compose logs で、そのサービスを確かめます。",
+   "options": {
+    "colorMode": "background",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   }
+  },
+  {
+   "id": 8,
+   "title": "レプリカの状態",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 5,
+    "w": 16,
+    "h": 5
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 1
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "Not active"
+        },
+        "1": {
+         "text": "Active"
+        }
+       }
+      }
+     ]
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "min by (collection, replica, node_name) (solr_collections_replica_state)",
+     "legendFormat": "{{collection}} {{replica}} @ {{node_name}}",
+     "instant": true
+    }
+   ],
+   "description": "Solr のレプリカ（コアの写し）が使える状態かです。「Not active」は、止まっているか復旧中です。1つでも止まっていると、冗長性がなくなります。管理ページのレプリカの表で、どのコアかを見ます。（今の値だけを出す。状態が変わった直後の約5分は、前の状態の記録も残るので、どちらかが「Not active」なら「Not active」と出す。コレクションを作った直後や、レプリカが戻った直後は、約5分「Not active」のことがある）"
+  },
+  {
+   "id": 9,
+   "title": "Solr の稼働ノード数",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 5,
+    "w": 8,
+    "h": 5
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       },
+       {
+        "color": "green",
+        "value": 2
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "solr_collections_live_nodes",
+     "legendFormat": "nodes"
+    }
+   ],
+   "description": "ZooKeeper が、生きていると見ている Solr のノードの数です。このセットでは2が正常で、1なら片方が落ちています（検索は続きますが、冗長性はありません）。"
+  },
+  {
+   "id": 10,
+   "title": "スケジューラーの最終応答",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 10,
+    "w": 6,
+    "h": 5
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 120
+       },
+       {
+        "color": "red",
+        "value": 300
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "solr_search_scheduler_heartbeat_age_seconds",
+     "legendFormat": "scheduler"
+    }
+   ],
+   "description": "常駐のスケジューラーが最後に動いてからの時間です。2分で橙、5分で赤です。赤なら、スケジューラーが止まっているので、定期クロールが動いていません。docker compose logs scheduler を見て、再起動します。"
+  },
+  {
+   "id": 11,
+   "title": "処理の最終結果",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 6,
+    "y": 10,
+    "w": 9,
+    "h": 5
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 1
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "Failed"
+        },
+        "1": {
+         "text": "Success"
+        }
+       }
+      }
+     ]
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "solr_search_task_last_success",
+     "legendFormat": "{{task}}"
+    }
+   ],
+   "description": "定期クロールなどの処理の、最後の実行が成功したかです。「Failed」なら、管理ページの「最後の実行」で、理由を見ます。"
+  },
+  {
+   "id": 12,
+   "title": "前回の処理からの経過時間",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 15,
+    "y": 10,
+    "w": 9,
+    "h": 5
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "time() - solr_search_task_last_finished_timestamp_seconds",
+     "legendFormat": "{{task}}"
+    }
+   ],
+   "description": "処理の最後の実行が終わってからの時間です。処理ごとの間隔より大幅に長いなら、スケジューラーか処理が止まっています。"
+  },
+  {
+   "id": 101,
+   "title": "Solr の性能",
+   "type": "row",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 15,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 1,
+   "title": "検索数（毎秒・コレクション別）",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 16,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "reqps",
+     "min": 0
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sum by (collection) (rate(solr_metrics_core_requests_total{handler=\"/select\",type=\"requests\"}[1m]))",
+     "legendFormat": "{{collection}}"
+    }
+   ],
+   "description": "Solr が受けた検索（/select）の回数です。急に0になったら、検索が止まっているか、Redmine から届いていません。まず上の「サービスの稼働状況」と、管理ページの状態を見ます。"
+  },
+  {
+   "id": 2,
+   "title": "検索エラー数（直近5分・コレクション別）",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 16,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "min": 0,
+     "decimals": 0,
+     "custom": {
+      "axisSoftMax": 1
+     }
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sum by (collection, type) (increase(solr_metrics_core_requests_total{handler=\"/select\",type=~\"errors|timeouts\"}[5m]))",
+     "legendFormat": "{{collection}} {{type}}"
+    }
+   ],
+   "description": "Solr が返した検索のエラー（クライアントの誤りとサーバーの誤り）の、直近5分の件数です。0が正常です。増えたら、Solr のログ（docker compose logs solr1）と、管理ページの接続の状態を見ます。"
+  },
+  {
+   "id": 3,
+   "title": "応答時間（平均・中央値、ミリ秒）",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 24,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "min": 0
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sum by (collection) (solr_metrics_core_request_time_ms_sum{handler=\"/select\"}) / sum by (collection) (solr_metrics_core_request_time_ms_count{handler=\"/select\"})",
+     "legendFormat": "{{collection}} mean"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "max by (collection) (solr_metrics_core_request_time_ms{handler=\"/select\",quantile=\"0.5\"})",
+     "legendFormat": "{{collection}} median"
+    }
+   ],
+   "description": "Solr の中で、検索1回にかかった時間です（最近の検索の平均と中央値）。目安は数十ミリ秒です。何百ミリ秒にもなったら、メモリ（JVM のヒープ）と、同時に重い処理（インデックスの作り直し）が動いていないかを見ます。なお、Solr のこの数字は累積の回数ではないので、速さの変化を見る用です。"
+  },
+  {
+   "id": 4,
+   "title": "応答時間（p99・p99.9、最も遅いレプリカ、ミリ秒）",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 24,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "min": 0
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "max by (collection) (solr_metrics_core_request_time_ms{handler=\"/select\",quantile=\"0.99\"})",
+     "legendFormat": "{{collection}} p99"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "max by (collection) (solr_metrics_core_request_time_ms{handler=\"/select\",quantile=\"0.999\"})",
+     "legendFormat": "{{collection}} p99.9"
+    }
+   ],
+   "description": "検索のうち遅い方（100回に1回、1000回に1回）の時間です。平均が良くても、これが大きいと、たまに遅い検索があります。大きいときは、遅いレプリカを調べます。"
+  },
+  {
+   "id": 5,
+   "title": "JVM ヒープ使用量",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 32,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "bytes",
+     "min": 0
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "solr_metrics_jvm_heap{item=\"used\",memory=\"heap\"}",
+     "legendFormat": "{{instance}}"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "max(solr_metrics_jvm_heap{item=\"max\",memory=\"heap\"})",
+     "legendFormat": "max heap"
+    }
+   ],
+   "description": "Solr が使っているメモリ（Java のヒープ）です。上限（-Xmx）に張り付いたままなら、メモリ不足です。Solr のメモリを増やすか、インデックスの量を見直します。"
+  },
+  {
+   "id": 6,
+   "title": "コアの文書数",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 32,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "min": 0
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "max by (collection) (solr_metrics_core_searcher_documents{type=\"numDocs\"})",
+     "legendFormat": "{{collection}}"
+    }
+   ],
+   "description": "コアに入っている文書の数です。同じコレクションのコアで数が大きく違うなら、レプリカが遅れています。管理ページのレプリカの表を見ます。"
+  },
+  {
+   "id": 38,
+   "title": "インデックスサイズ（1レプリカあたり）",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 40,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "bytes",
+     "min": 0
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "max by (collection) (solr_metrics_core_index_size_bytes)",
+     "legendFormat": "{{collection}}"
+    }
+   ],
+   "description": "コレクションのインデックスがディスクで占める大きさです（1レプリカ分。全体では、レプリカの数を掛けます）。文書を消しても、セグメントのマージまでは減りません。増え方を、ディスクの空きと見比べます。"
+  },
+  {
+   "id": 39,
+   "title": "ディスク容量（空き・全体）",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 40,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "bytes",
+     "min": 0
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "min by (instance) (solr_metrics_node_core_root_fs_bytes{item=\"usableSpace\"})",
+     "legendFormat": "{{instance}} 空き"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "max by (instance) (solr_metrics_node_core_root_fs_bytes{item=\"totalSpace\"})",
+     "legendFormat": "{{instance}} 全体"
+    }
+   ],
+   "description": "Solr のホームがあるディスクの空きと全体です。ほかのプログラムのファイルも含みます。空きが減り続けるなら、インデックスのサイズと比べ、ディスクを足すか、インデックスに入れるものを見直します。"
+  },
+  {
+   "id": 13,
+   "title": "検索の質（検索語と利用者は表示しない）",
+   "type": "row",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 48,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 14,
+   "title": "0件率（直近1時間）",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 49,
+    "w": 6,
+    "h": 5
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 0.1
+       },
+       {
+        "color": "red",
+        "value": 0.25
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "noValue": "検索なし",
+     "decimals": 1
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sum(increase(solr_search_searches_total{result=\"zero\"}[1h])) / sum(increase(solr_search_searches_total{result=~\"found|zero\"}[1h]))",
+     "legendFormat": "zero"
+    }
+   ],
+   "description": "検索のうち、何もヒットしなかった割合です。低いほど良く、10%で橙、25%で赤です（暫定値。運用しながら調整します）。高いなら、管理ページの「検索ログ」で、0件だった語を見て、同義語の一覧やインデックスの欠けを直します。"
+  },
+  {
+   "id": 15,
+   "title": "クリック率（直近1時間）",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 6,
+    "y": 49,
+    "w": 6,
+    "h": 5
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 0.3
+       },
+       {
+        "color": "green",
+        "value": 0.5
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "noValue": "検索なし",
+     "decimals": 1
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sum(increase(solr_search_searches_with_click_total[1h])) / sum(increase(solr_search_searches_total{result=\"found\"}[1h]))",
+     "legendFormat": "opened"
+    }
+   ],
+   "description": "ヒットがあった検索のうち、結果から何か開かれた割合です。高いほど良く、30%未満で橙、50%以上で緑です（暫定値）。低いなら、ヒットしても役に立っていません。「検索ログ」の「開かれなかった検索」を見ます。右クリックなどで開いたものは数えないので、目安です。"
+  },
+  {
+   "id": 16,
+   "title": "検索数（直近1時間）",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 49,
+    "w": 6,
+    "h": 5
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "noValue": "検索なし",
+     "decimals": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sum by (result) (increase(solr_search_searches_total[1h]))",
+     "legendFormat": "{{result}}"
+    }
+   ],
+   "description": "見つかった・0件・失敗の件数です。青は「良し悪しを判定しない」色です（情報だけ）。"
+  },
+  {
+   "id": 17,
+   "title": "除外されたグループ数（正常は0）",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 18,
+    "y": 49,
+    "w": 6,
+    "h": 5
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "noValue": "0",
+     "decimals": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sum(increase(solr_search_dropped_groups_total[1h]))",
+     "legendFormat": "dropped"
+    }
+   ],
+   "description": "Solr が返したのに、Redmine の権限などの確認で、画面に出さなかった数です。0が正常で、増えたら、権限の絞り込みと Redmine の判定が食い違っています。管理ページの「検索ログ」の「落とした」の列で、どの検索かを見ます。"
+  },
+  {
+   "id": 18,
+   "title": "検索数（5分ごと・結果別）",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 54,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "custom": {
+      "drawStyle": "bars",
+      "stacking": {
+       "mode": "normal"
+      },
+      "fillOpacity": 80
+     },
+     "noValue": "この期間のデータなし",
+     "min": 0
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sum by (result) (increase(solr_search_searches_total[5m]))",
+     "legendFormat": "{{result}}"
+    }
+   ],
+   "description": "5分ごとの、見つかった・0件・失敗の件数です。失敗が続くなら、Solr に届いていません。"
+  },
+  {
+   "id": 19,
+   "title": "検索の応答時間（中央値・p95、秒）",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 54,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "custom": {},
+     "noValue": "この期間のデータなし",
+     "min": 0
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "histogram_quantile(0.5, sum by (le) (rate(solr_search_search_duration_seconds_bucket[15m])))",
+     "legendFormat": "median"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "histogram_quantile(0.95, sum by (le) (rate(solr_search_search_duration_seconds_bucket[15m])))",
+     "legendFormat": "p95"
+    }
+   ],
+   "description": "利用者が検索してから、一覧ができるまでの時間です（Solr への問い合わせと、Redmine の確認を含む）。上のSolr の時間より長いのが普通です。p95が数秒なら、遅いと感じられます。"
+  },
+  {
+   "id": 20,
+   "title": "検索あたりのヒット数（中央値・p90）",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 62,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "custom": {},
+     "noValue": "この期間のデータなし",
+     "min": 0
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "histogram_quantile(0.5, sum by (le) (rate(solr_search_search_hits_bucket[1h])))",
+     "legendFormat": "median"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "histogram_quantile(0.9, sum by (le) (rate(solr_search_search_hits_bucket[1h])))",
+     "legendFormat": "p90"
+    }
+   ],
+   "description": "1回の検索で、ヒットしたグループの数です。中央値が0に近いなら、探しても見つからない検索が多いです。値は区間の補間なので、おおまかな目安です。"
+  },
+  {
+   "id": 21,
+   "title": "クリックされた順位（中央値・p90）",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 62,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "custom": {},
+     "noValue": "この期間のデータなし",
+     "min": 0
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "histogram_quantile(0.5, sum by (le) (rate(solr_search_click_rank_bucket[1h])))",
+     "legendFormat": "median"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "histogram_quantile(0.9, sum by (le) (rate(solr_search_click_rank_bucket[1h])))",
+     "legendFormat": "p90"
+    }
+   ],
+   "description": "結果の何番目が開かれたかです。1〜3位が多いほど、上位に出したいものが出ています。大きいなら、探しているものが下の方にあります（順位の調整やリランカーの材料）。"
+  },
+  {
+   "id": 22,
+   "title": "インデックスの状態",
+   "type": "row",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 70,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 23,
+   "title": "Solr への接続",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 71,
+    "w": 4,
+    "h": 5
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 1
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "noValue": "データなし",
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "Down"
+        },
+        "1": {
+         "text": "Up"
+        }
+       }
+      }
+     ]
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "solr_search_index_up",
+     "legendFormat": "up"
+    }
+   ],
+   "description": "インデックスの状態を調べるとき、Solr が答えたかです。「Down」なら、下の数字は Redmine 側だけです。"
+  },
+  {
+   "id": 24,
+   "title": "インデックスの作成の進み具合：Solr ÷ Redmine（正常は100%）",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 4,
+    "y": 71,
+    "w": 10,
+    "h": 5
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 0.99
+       },
+       {
+        "color": "green",
+        "value": 1
+       },
+       {
+        "color": "orange",
+        "value": 1.000000001
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "noValue": "データなし",
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "1": {
+         "text": "完了",
+         "color": "green",
+         "index": 0
+        }
+       }
+      }
+     ],
+     "decimals": 1
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "solr_search_index_documents{where=\"solr\"} / ignoring(where) (solr_search_index_documents{where=\"redmine\"} > 0) or ignoring(where) ((solr_search_index_documents{where=\"redmine\"} == 0) + 1)",
+     "legendFormat": "{{type}}"
+    }
+   ],
+   "description": "種類ごとに、Redmine にあるもののうち、どれだけがインデックスに入っているか（Solr の件数 ÷ Redmine の件数）です。すべて入っていれば「完了」（100%）と出ます。99%以上100%未満は橙、99%未満は赤です（作り直しの最中は0%から上がっていきます）。件数が少しだけずれていると、表示は100%に丸まっても橙になります。100%を超えるのは、Redmine で消したのに Solr に残っているもの（橙）で、「突き合わせ」の処理が消します。件数は、下の「インデックスの作成の進み具合の推移」の線にカーソルを当てると出ます。"
+  },
+  {
+   "id": 25,
+   "title": "インデックスの遅延",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 14,
+    "y": 71,
+    "w": 10,
+    "h": 5
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 600
+       },
+       {
+        "color": "red",
+        "value": 3600
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "noValue": "データなし"
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "solr_search_index_lag_seconds",
+     "legendFormat": "{{type}}"
+    }
+   ],
+   "description": "種類ごとに、Redmine でいちばん新しい更新から、Solr のいちばん新しい文書までの遅れです。0が正常です。10分で橙、1時間で赤です。増え続けるなら、差分クロールが止まっています（スケジューラーを見ます）。"
+  },
+  {
+   "id": 26,
+   "title": "インデックスの作成の進み具合の推移",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 76,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "custom": {},
+     "noValue": "この期間のデータなし",
+     "decimals": 1
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byFrameRefID",
+       "options": "B"
+      },
+      "properties": [
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "viz": true,
+         "legend": true,
+         "tooltip": false
+        }
+       },
+       {
+        "id": "unit",
+        "value": "none"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     }
+    ]
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "solr_search_index_documents{where=\"solr\"} / ignoring(where) (solr_search_index_documents{where=\"redmine\"} > 0) or ignoring(where) ((solr_search_index_documents{where=\"redmine\"} == 0) + 1)",
+     "legendFormat": "{{type}}"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "solr_search_index_documents{where=\"redmine\"} - ignoring(where) solr_search_index_documents{where=\"solr\"}",
+     "legendFormat": "{{type}}（Redmine − Solr の件数）"
+    }
+   ],
+   "description": "上の「インデックスの作成の進み具合」の推移です（種類ごとの件数の大きさの違いに左右されないように、割合で描きます）。カーソルを当てると、Redmine と Solr の件数の差も出ます。100%に戻らずに下がり続けるなら、取り込みが追いついていません。",
+   "options": {
+    "tooltip": {
+     "mode": "multi",
+     "sort": "none"
+    },
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    }
+   }
+  },
+  {
+   "id": 27,
+   "title": "最新文書の経過時間",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 76,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "custom": {},
+     "noValue": "この期間のデータなし",
+     "min": 0
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "solr_search_index_newest_age_seconds",
+     "legendFormat": "{{type}}"
+    }
+   ],
+   "description": "種類ごとの、Solr でいちばん新しい文書が、何時間前のものかです。更新の少ない種類（文書、Wikiなど）は大きくなって構いません。チケットが長く古いままなら、クロールが止まっています。"
+  },
+  {
+   "id": 36,
+   "title": "残存カスタムフィールド数（正常は0）",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 84,
+    "w": 12,
+    "h": 5
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "noValue": "データなし",
+     "decimals": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "solr_search_index_deleted_fields",
+     "legendFormat": "件数"
+    }
+   ],
+   "description": "Redmine にはもうないカスタムフィールドの値が、インデックスに残っているフィールドの数です。0が正常です。1以上なら、管理ページの「インデックス」タブの「部分インデックスの作り直し」（フィールド）で消せます。差分クロールは、そのチケットを編集して保存したときにだけ置き換えます。"
+  },
+  {
+   "id": 37,
+   "title": "残存フィールドを持つチケット数（正常は0）",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 84,
+    "w": 12,
+    "h": 5
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "noValue": "データなし",
+     "decimals": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "solr_search_index_deleted_field_issues",
+     "legendFormat": "件数"
+    }
+   ],
+   "description": "そのようなフィールドの値を持つインデックスのチケットの数です（フィールドが2つあれば2回数えます）。0が正常です。インデックスを確かめられなかったとき（Solr が答えないとき）は、データなしになります。"
+  },
+  {
+   "id": 28,
+   "title": "正解つき検索（手動実行の最新値）",
+   "type": "row",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 89,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 29,
+   "title": "権限漏れ（正常は0）",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 90,
+    "w": 4,
+    "h": 5
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "noValue": "まだ流していない",
+     "decimals": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "solr_search_golden_leaks{set=\"coverage\"}",
+     "legendFormat": "leaks"
+    }
+   ],
+   "description": "正解つきの検索（網羅）で、その利用者が見てはいけないものが検索結果に出た数です。0が正常で、1以上は権限の漏れです。すぐに原因を調べます。"
+  },
+  {
+   "id": 30,
+   "title": "再現率（網羅）",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 4,
+    "y": 90,
+    "w": 5,
+    "h": 5
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 0.9
+       },
+       {
+        "color": "green",
+        "value": 0.98
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "noValue": "まだ流していない",
+     "decimals": 1
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "solr_search_golden_recall{set=\"coverage\"}",
+     "legendFormat": "recall"
+    }
+   ],
+   "description": "正解つきの検索（網羅）で、見つけるべきものを見つけた割合です。圧縮ファイル（zip）の本文は取り出さない決めなので、1にはなりません。値そのものでなく、前回との差を見ます（98%以上で緑、90%未満で赤）。"
+  },
+  {
+   "id": 31,
+   "title": "MRR（順位。最良は1）",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 9,
+    "y": 90,
+    "w": 5,
+    "h": 5
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 0.5
+       },
+       {
+        "color": "green",
+        "value": 0.8
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "noValue": "まだ流していない",
+     "decimals": 2
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "solr_search_golden_mrr{set=\"ranking\"}",
+     "legendFormat": "MRR"
+    }
+   ],
+   "description": "正解つきの検索（順位）で、最初の正解の順位の逆数の平均です。1が最良で、0.8以上で緑、0.5未満で赤です（暫定値）。重みの調整やリランカーの前後を比べる値です。"
+  },
+  {
+   "id": 32,
+   "title": "上位正解率（順位）",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 14,
+    "y": 90,
+    "w": 5,
+    "h": 5
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 0.7
+       },
+       {
+        "color": "green",
+        "value": 0.9
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "noValue": "まだ流していない",
+     "decimals": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "solr_search_golden_top_share{set=\"ranking\"}",
+     "legendFormat": "share"
+    }
+   ],
+   "description": "正解つきの検索（順位）で、正解が決めた順位（通常は上位5件）に入った割合です。90%以上で緑、70%未満で赤です（暫定値）。"
+  },
+  {
+   "id": 33,
+   "title": "前回の実行からの経過時間",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 19,
+    "y": 90,
+    "w": 5,
+    "h": 5
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 604800
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "noValue": "まだ流していない",
+     "decimals": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "time() - solr_search_golden_last_run_timestamp_seconds",
+     "legendFormat": "{{set}}"
+    }
+   ],
+   "description": "正解つきの検索を、手で最後に流してからの時間です。1週間を超えると橙です。設定や重みを変えたあとは、流し直します。"
+  },
+  {
+   "id": 34,
+   "title": "再現率・適合率の推移（網羅）",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 95,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "custom": {},
+     "noValue": "この期間のデータなし",
+     "min": 0,
+     "max": 1
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "solr_search_golden_recall{set=\"coverage\"}",
+     "legendFormat": "recall"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "solr_search_golden_precision{set=\"coverage\"}",
+     "legendFormat": "precision"
+    }
+   ],
+   "description": "正解つきの検索（網羅）の、実行ごとの再現率と適合率です。変更の前後で下がっていないかを見ます。"
+  },
+  {
+   "id": 35,
+   "title": "MRR・上位正解率の推移（順位）",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 95,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "custom": {},
+     "noValue": "この期間のデータなし",
+     "min": 0,
+     "max": 1
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "solr_search_golden_mrr{set=\"ranking\"}",
+     "legendFormat": "MRR"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "solr_search_golden_top_share{set=\"ranking\"}",
+     "legendFormat": "share in the first places"
+    }
+   ],
+   "description": "正解つきの検索（順位）の、実行ごとの MRR と上位に出た割合です。重みの調整の前後で、上がったか下がったかを見ます。"
+  }
+ ]
+}

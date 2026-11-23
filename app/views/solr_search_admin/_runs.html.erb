@@ -1,0 +1,41 @@
+<%# Crawl runs (design D-22): one row per run. runs: [task, SolrSearchRun or nil (never ran)] pairs.
+    next_runs: {task => when the scheduler runs it next, nil when it does not}, or nil: no such column. %>
+<% next_runs = local_assigns[:next_runs] %>
+<table class="list">
+  <thead>
+    <tr>
+      <th><%= l(:label_solr_search_run_task) %></th>
+      <th><%= l(:field_status) %></th>
+      <th><%= l(:label_solr_search_run_triggered_by) %></th>
+      <th><%= l(:label_solr_search_run_started_at) %></th>
+      <th><%= l(:label_solr_search_run_finished_at) %></th>
+      <th><%= l(:label_solr_search_run_duration) %></th>
+      <th><%= l(:label_solr_search_run_counts) %></th>
+      <% if next_runs %><th><%= l(:label_solr_search_run_next) %></th><% end %>
+    </tr>
+  </thead>
+  <tbody>
+    <% runs.each do |task, run| %>
+      <tr>
+        <td class="name"><%= solr_search_run_task_label(run ? run.task : task) %></td>
+        <% if run %>
+          <%# why a run failed goes with "failed", not under the counts (M1 review, ui 7) %>
+          <td>
+            <%= solr_search_run_status(run) %>
+            <% if run.error.present? %><br><code class="solr-search-run-error"><%= run.error %></code><% end %>
+          </td>
+          <td><%= l(:"label_solr_search_run_trigger_#{run.triggered_by}") %></td>
+          <td><%= run.started_at ? format_time(run.started_at) : '-' %></td>
+          <td><%= run.finished_at ? format_time(run.finished_at) : '-' %></td>
+          <td><%= solr_search_run_duration(run) %></td>
+          <td><%= solr_search_run_counts(run) %></td>
+        <% else %>
+          <td colspan="6"><%= l(:label_solr_search_run_never) %></td>
+        <% end %>
+        <% if next_runs %>
+          <td><%= solr_search_run_next(task, next_runs) %></td>
+        <% end %>
+      </tr>
+    <% end %>
+  </tbody>
+</table>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- redmine_solr_search: schema of the external source collections (src_12, src_13, ...; design D-26).
+     Read-only (ClassicIndexSchemaFactory in solrconfig.xml): change this file and solr/common/, not the Schema API.
+     common-types.xml / common-fields.xml come from solr/common/ and are copied next to this file on upload. -->
+<schema name="src" version="1.7">
+  <xi:include href="common-types.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
+  <xi:include href="common-fields.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
+
+  <!-- Returned only (fl): where the document was crawled from (D-25) -->
+  <field name="url"  type="string" indexed="false" stored="true"/>
+  <field name="path" type="string" indexed="false" stored="true"/>
+
+  <uniqueKey>id</uniqueKey>
+</schema>

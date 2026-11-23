@@ -1,0 +1,351 @@
+<h2><%= @project ? l(:label_solr_search_with_project, project: @project.name) : l(:label_solr_search) %></h2>
+
+<%= form_tag(@project ? project_solr_search_path(@project) : solr_search_path, method: :get, id: 'solr-search-form') do %>
+  <div class="box">
+    <p>
+      <%= label_tag 'solr-search-input', l(:description_search), class: 'hidden-for-sighted' %>
+      <%= text_field_tag 'q', @solr_question, size: 60, id: 'solr-search-input', autofocus: @solr_question.blank?,
+                         required: true, pattern: '.*\S.*', title: l(:error_solr_search_no_words), class: 'no-tooltip' %>
+      <%# no-tooltip: the title is the browser's message for a blank query; as Redmine's hover tooltip it showed over the
+          field (and its suggestions) whenever the field had the focus, as on opening the page (O-51) %>
+      <%# a search can take seconds on a large index: the button says so and is not pressed twice (M1 review, ui 18) %>
+      <%= submit_tag l(:label_search), name: nil, data: {disable_with: l(:label_solr_search_searching)} %>
+    </p>
+    <%# one line for each kind of choice: how the words are matched, what is searched, the order (ui 15, 19) %>
+    <p role="group" aria-labelledby="solr-search-words-label">
+      <span id="solr-search-words-label"><%= l(:label_solr_search_words) %>:</span>
+      <label><%= radio_button_tag 'all_words', '', !@all_words %> <%= l(:label_solr_search_any_words) %></label>
+      <label><%= radio_button_tag 'all_words', '1', @all_words %> <%= l(:label_solr_search_all_words) %></label>
+      <label class="solr-search-option-label"><%= check_box_tag 'exact', '1', @exact %> <%= l(:label_solr_search_exact) %></label>
+      <label class="solr-search-option-label"><%= check_box_tag 'attributes', '1', @attributes %> <%= l(:label_solr_search_attributes) %></label>
+    </p>
+    <%# the order on the right of the kinds, on the same line (UI review 13) %>
+    <p>
+      <span role="group" aria-labelledby="solr-search-types-label">
+        <span id="solr-search-types-label"><%= l(:label_solr_search_types) %>:</span>
+        <% @type_choices.each do |type| %>
+          <label title="<%= solr_search_type_filter_title(type) %>"><%= check_box_tag 'types[]', type, @types.include?(type), id: "solr-search-type-#{type}" %> <%= solr_search_type_filter_text(type) %></label>
+        <% end %>
+      </span>
+      <span role="group" aria-labelledby="solr-search-sort-label" class="solr-search-option-label">
+        <span id="solr-search-sort-label"><%= l(:label_solr_search_sort) %>:</span>
+        <label><%= radio_button_tag 'sort', 'relevance', @sort == 'relevance' %> <%= l(:label_solr_search_sort_relevance) %></label>
+        <label><%= radio_button_tag 'sort', 'updated', @sort == 'updated' %> <%= l(:label_solr_search_sort_updated) %></label>
+      </span>
+    </p>
+    <%# the filters of Redmine's issue list, for the attributes of an issue (design D-49); open when one is set %>
+    <details class="solr-search-attribute-filters" <%= 'open' if @query.filters.any? %>>
+      <summary><%= l(:label_solr_search_attribute_filters) %> <span class="info solr-search-filters-hint"><%= l(:text_solr_search_attribute_filters) %></span></summary>
+      <div class="solr-search-filters-body">
+        <%= render partial: 'queries/filters', locals: {query: @query} %>
+      </div>
+    </details>
+  </div>
+<% end %>
+<%# the choices on the left, as on a shop's page, the result on the right (D-49); they belong to the form above %>
+<div class="solr-search-layout">
+<%= render 'facets' %>
+<div class="solr-search-main">
+<% unless @result || @error %>
+  <%# what this page is for, before the first search (ui 17) %>
+  <p class="info"><%= l(:text_solr_search_intro) %></p>
+<% end %>
+
+<%# the result appears with a short fade, so that searching again with the same answer visibly redraws it %>
+<div class="solr-search-result">
+<% if @error %>
+  <p id="errorExplanation"><%= @error %></p>
+<% elsif @result %>
+  <%# counts are Solr's, before the per-record checks drop anything (design D-30), so they are only "about" %>
+  <%# the number of results is the heading; the places matched are a side note (ui 24) %>
+  <h3>
+    <%= l(:label_result_plural) %> (<%= l(:label_solr_search_group_count, count: number_with_delimiter(SolrSearch::CountRounding.round(@result.group_count))) %>)
+    <span class="solr-search-hit-count"><%= l(:label_solr_search_hit_count, count: number_with_delimiter(SolrSearch::CountRounding.round(@result.hit_count))) %></span>
+  </h3>
+
+  <%= render 'chosen' %>
+
+  <% if @result.debug %>
+    <details class="solr-search-debug">
+      <summary><%= l(:label_solr_search_debug, qtime: @result.debug[:qtime]) %></summary>
+      <p><code><%= @result.debug[:url] %></code></p>
+      <p><code><%= @result.debug[:parsed] %></code></p>
+      <% if @result.reranker %>
+        <p><%= @result.reranker[:used] ? l(:text_solr_search_reranker_used, count: @result.reranker[:window], ms: @result.reranker[:milliseconds]) : l(:text_solr_search_reranker_failed, error: @result.reranker[:error]) %></p>
+      <% end %>
+    </details>
+  <% end %>
+
+  <% if @result.attributes_dropped %>
+    <p class="warning"><%= l(:text_solr_search_attributes_dropped) %></p>
+  <% end %>
+
+  <% if @result.group_count.zero? %>
+    <%# nothing at all: say which of the choices made could be widened (ui 4) %>
+    <div class="nodata solr-search-none">
+      <p><%= l(:text_solr_search_none, words: @solr_question) %></p>
+      <% if (hints = solr_search_widen_hints).any? %>
+        <p><%= l(:text_solr_search_none_hints) %></p>
+        <ul><% hints.each do |hint| %><li><%= hint %></li><% end %></ul>
+      <% end %>
+    </div>
+  <% elsif @groups.empty? %>
+    <%# Solr counted hits for the search, but every one of this page was dropped by the display check (the permission changed
+        after the index was made, a note made private ...): the pages are not filled up again, so say it %>
+    <p class="nodata"><%= l(:label_no_data) %></p>
+    <% if @result.group_count.positive? %>
+      <p><%= l(:text_solr_search_page_all_hidden) %></p>
+    <% end %>
+  <% else %>
+    <%# the list carries its search (the row of the log) and the click address: the script at the end reports the links that are followed (design D-45).
+        tag.dl with a block, not tag.attributes: that came with Rails 7.0, and Rails 6.1 (Redmine 5.1) writes an element of it (D-62) %>
+    <%= tag.dl(id: 'search-results', class: 'solr-search-results',
+               data: {solr_log: @search_log&.id, solr_token: @search_log&.click_token, solr_click_url: (solr_search_click_path if @search_log)}.compact) do %>
+      <% @groups.each_with_index do |group, index| %>
+        <% rank = index + 1 %>
+        <% if @external_group_ids.include?(group.group_id) %>
+          <%= render 'external_group', group: group, rank: rank %>
+          <% next %>
+        <% end %>
+        <% container = @containers[group.group_id] %>
+        <dt data-solr-group="<%= group.group_id %>" data-solr-rank="<%= rank %>">
+          <%# where it is (the kind and the project) above the link, small and light, as the other places are (2026-10-07) %>
+          <div class="solr-search-location">
+            <span class="solr-search-type"><%= solr_search_type_label(container) %></span>
+            <%= content_tag('span', solr_search_container_project(container), class: 'project') %>
+          </div>
+          <div class="solr-search-title">
+            <%= solr_search_container_link(container) %>
+            <%= solr_search_private_badge if container.is_a?(Issue) && container.is_private? %>
+            <%= content_tag('span', "· #{container.status}", class: 'solr-search-status') if container.is_a?(Issue) %>
+          </div>
+        </dt>
+        <dd data-solr-group="<%= group.group_id %>" data-solr-rank="<%= rank %>">
+          <% group.hits.each do |hit| %>
+            <% solr_search_hit_lines(hit, @custom_fields).each_with_index do |(label, snippet, field), i| %>
+              <div class="solr-search-hit">
+                <%# the field it matched in (or the file's name), then the value indented under it %>
+                <% head = solr_search_hit_head(hit, field, label, container, @notes, @attachments, first: i.zero?) %>
+                <%= content_tag('div', head, class: 'solr-search-field') if head %>
+                <div class="solr-search-snippet description"><%= solr_search_snippet(snippet) %></div>
+              </div>
+            <% end %>
+          <% end %>
+          <% if group.hit_count > group.hits.size %>
+            <%# the number is not shown (R1-a); the container lists them all (ui 5) %>
+            <div class="solr-search-more"><%= link_to(l(:label_solr_search_more), solr_search_container_path(container)) %></div>
+          <% end %>
+          <% if (time = solr_search_container_time(container, group, @attachments)) %>
+            <span class="author"><%= solr_search_time_label(container) %> <%= format_time(time) %></span>
+          <% end %>
+        </dd>
+      <% end %>
+    <% end %>
+  <% end %>
+  <%# kept when this page has nothing left: the next pages may still have some %>
+  <% if @result.group_count.positive? %>
+    <span class="pagination"><%= pagination_links_full @paginator, @result.group_count, per_page_links: false %></span>
+  <% end %>
+<% end %>
+</div>
+</div>
+</div>
+
+<%# Reports the links of the result list that are followed (design D-45): left, Ctrl and middle click, Enter. The links keep their
+    own addresses; the report goes aside (sendBeacon) and holds nothing back. Nothing happens without a search that was logged. %>
+<%= javascript_tag do %>
+  (function () {
+    // on the layout, which stays when the result is swapped (see below): the list is looked for at each click
+    var layout = document.querySelector('.solr-search-layout');
+    if (!layout) return;
+    var token = document.querySelector('meta[name="csrf-token"]');
+    function report(event) {
+      var list = document.getElementById('search-results');
+      if (!list || !list.dataset.solrLog || !list.dataset.solrToken || !navigator.sendBeacon) return;
+      // auxclick is also the right button (the menu): only the middle button opens a link
+      if (event.type === 'auxclick' && event.button !== 1) return;
+      var link = event.target.closest ? event.target.closest('a[href]') : null;
+      if (!link || !list.contains(link)) return;
+      var holder = link.closest('[data-solr-group]');
+      if (!holder) return;
+      var href = link.getAttribute('href') || '';
+      var kind = link.closest('.solr-search-more') ? 'more' : /\/attachments\//.test(href) ? 'attachment' :
+                 /#note-/.test(href) ? 'note' : link.closest('.solr-search-title') ? 'title' : 'other';
+      navigator.sendBeacon(list.dataset.solrClickUrl, new URLSearchParams({
+        log_id: list.dataset.solrLog, token: list.dataset.solrToken, group: holder.dataset.solrGroup, rank: holder.dataset.solrRank, kind: kind,
+        title: (link.textContent || '').trim().slice(0, 200), href: href.slice(0, 1000),
+        authenticity_token: token ? token.content : ''
+      }));
+    }
+    layout.addEventListener('click', report);
+    layout.addEventListener('auxclick', report);
+  })();
+<% end %>
+
+<%# The left bar and the result, searched again without loading the page (UI review, after 16): choosing in the bar, taking a
+    choice off, going down a folder and the page links fetch the page in the background and put its layout (the bar and the
+    result) in place of this one, so that the page does not blink or jump and the scripts of other plugins (a banner ...) do not
+    run again. A page link brings the page back to the top; the others keep where it is. The address is kept (the back button
+    reloads the page at it). When the request fails, or without fetch, it is the page's own way: the form is sent / the link
+    is followed. After each swap the event solr-search:updated is sent on document: a script of one's own that changes the
+    result (design D-35, operations 5.1) listens to it. %>
+<%= javascript_tag do %>
+  (function () {
+    var form = document.getElementById('solr-search-form');
+    var layout = document.querySelector('.solr-search-layout');
+    if (!form || !layout) return;
+    var canFetch = !!(window.fetch && window.DOMParser && window.history && history.pushState && window.URLSearchParams && window.FormData);
+
+    // what was opened or folded by hand is kept over the next search: by the heading of the part, in sessionStorage (which
+    // may be unavailable: then it is as it was, the page's own choice)
+    var memory = {};
+    try { memory = JSON.parse(sessionStorage.getItem('solr-search-facets') || '{}'); } catch (e) {}
+    function remember(key, value) {
+      memory[key] = value;
+      try { sessionStorage.setItem('solr-search-facets', JSON.stringify(memory)); } catch (e) {}
+    }
+    function keyOf(node) {
+      var section = node.closest('details');
+      var summary = section && section.querySelector('summary');
+      return summary ? summary.textContent.trim() : null;
+    }
+    function initBar() {
+      document.querySelectorAll('.solr-search-facets details.solr-search-facet-section').forEach(function (section) {
+        var key = keyOf(section.querySelector('summary'));
+        // a part with something chosen in it stays open, whatever was remembered
+        if (key && key in memory && !section.querySelector('input:checked')) { section.open = memory[key]; }
+        // only what the user does (a click on the heading), not the page's own opening
+        section.querySelector('summary').addEventListener('click', function () {
+          setTimeout(function () { if (key) remember(key, section.open); });
+        });
+      });
+      // the rest of a long list is folded, and a link under it opens it in place
+      document.querySelectorAll('.solr-search-facet-toggle').forEach(function (button) {
+        var extra = button.parentNode.querySelector('.solr-search-facet-extra');
+        var key = keyOf(button) + ':more';
+        function show(open) {
+          extra.hidden = !open;
+          button.setAttribute('aria-expanded', String(open));
+          button.textContent = open ? button.dataset.less : button.dataset.more;
+        }
+        show(memory[key] === true);
+        button.hidden = false;
+        button.addEventListener('click', function () { show(extra.hidden); remember(key, !extra.hidden); });
+      });
+    }
+    initBar();
+
+    function formUrl() { return form.action + '?' + new URLSearchParams(new FormData(form)).toString(); }
+    function swap(url, toTop) {
+      layout.style.opacity = '0.6';
+      fetch(url, {credentials: 'same-origin'})
+        .then(function (res) { if (!res.ok) throw new Error(res.status); return res.text(); })
+        .then(function (html) {
+          var doc = new DOMParser().parseFromString(html, 'text/html');
+          var fresh = doc.querySelector('.solr-search-layout');
+          if (!fresh) throw new Error('no area');
+          layout.innerHTML = fresh.innerHTML;
+          layout.style.opacity = '';
+          if (doc.title) document.title = doc.title;
+          history.pushState(null, '', url);
+          initBar();
+          if (toTop) window.scrollTo(0, 0);
+          document.dispatchEvent(new CustomEvent('solr-search:updated'));
+        })
+        .catch(function () { window.location = url; });
+    }
+
+    // a search with nothing in it is not made, and nothing is said about it: the words are asked for only when the search
+    // button (or Enter) is pressed
+    layout.addEventListener('change', function (event) {
+      if (!event.target.closest('.solr-search-facets') || !form.checkValidity()) return;
+      if (canFetch) { swap(formUrl(), false); } else if (form.requestSubmit) { form.requestSubmit(); }
+    });
+    if (!canFetch) return;
+    layout.addEventListener('click', function (event) {
+      if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      var link = event.target.closest('a[href]');
+      if (!link) return;
+      var pager = link.closest('.pagination');
+      if (!pager && !link.closest('.solr-search-facets, .solr-search-chosen')) return;
+      event.preventDefault();
+      swap(link.href, !!pager);
+    });
+    window.addEventListener('popstate', function () { location.reload(); });
+  })();
+<% end %>
+
+<% content_for :header_tags do %>
+  <style>
+    /* #666 on white is 5.74:1 (WCAG AA needs 4.5:1; #888 was 3.54:1. M1 review C2) */
+    .solr-search-results dt .solr-search-type { color: #666; }
+    /* Google-like: the place small and light above a larger link; the matched text smaller, indented under its name */
+    .solr-search-results dt .solr-search-location { font-size: 0.85em; color: #666; font-weight: normal; }
+    /* Redmine puts " - " after a project name; here it is a line of its own */
+    #search-results dt .solr-search-location .project:after { content: none; }
+    .solr-search-results dt .solr-search-title { font-size: 1.2em; }
+    .solr-search-results dt .solr-search-title a, .solr-search-results dt .solr-search-title-external { font-weight: bold; }
+    .solr-search-results .solr-search-hit { margin: 4px 0; }
+    .solr-search-results .solr-search-field { color: #666; }
+    /* the id in the selector: Redmine styles dd .description (italic) with it */
+    dl#search-results dd .solr-search-snippet { margin-left: 1.5em; font-style: normal; font-size: 1em; line-height: 1.4;
+      display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
+    .solr-search-results .solr-search-more { color: #666; font-size: 0.9em; }
+    /* the path on a line of its own, indented under the kind and the source */
+    .solr-search-results .solr-search-external-path { display: block; margin-left: 1.5em; color: #666; word-break: break-all; }
+    .solr-search-debug { margin: 0 0 1em; color: #666; font-size: 0.9em; }
+    .solr-search-option-label { margin-left: 1.5em; }
+    .solr-search-filters-hint { margin-left: 1em; font-weight: normal; }
+    .solr-search-debug code { word-break: break-all; }
+    /* the choices left of the result (D-49) */
+    .solr-search-layout { display: flex; flex-wrap: wrap; gap: 0 2em; align-items: flex-start; }
+    .solr-search-facets { flex: 0 0 220px; max-width: 100%; }
+    .solr-search-main { flex: 1 1 360px; min-width: 0; }
+    .solr-search-facet-section { margin: 0 0 1em; }
+    .solr-search-facet-section > summary { font-weight: bold; cursor: pointer; margin-bottom: 0.3em; }
+    .solr-search-facets label { display: block; margin: 0.15em 0; }
+    .solr-search-facets .solr-search-facet-select { margin: 0.4em 0 0; }
+    .solr-search-facets select { max-width: 100%; }
+    /* Redmine puts "add a filter" on the right of the filters (float: inline-end, 35%): here it comes first, on the left, where one
+       looks for it; the filters follow below it */
+    .solr-search-filters-body { display: flex; flex-direction: column; }
+    .solr-search-filters-body .add-filter { order: -1; float: none; width: auto; text-align: start; margin: 0.3em 0 0.5em; }
+    .solr-search-filters-body #filters-table { float: none; }
+    .solr-search-range label { display: block; margin: 0.2em 0; }
+    .solr-search-range input { width: 9em; }
+    .solr-search-folder-path { margin: 0 0 0.3em; }
+    .solr-search-folder { margin: 0.15em 0; }
+    .solr-search-facet-toggle { background: none; border: 0; padding: 0; margin: 0.3em 0 0; color: #169; cursor: pointer; font: inherit; }
+    .solr-search-facet-toggle:hover { text-decoration: underline; }
+    .solr-search-facet-toggle:before { content: '\25BE'; margin-right: 0.3em; }
+    .solr-search-facet-toggle[aria-expanded=true]:before { content: '\25B4'; }
+    .solr-search-chosen { margin: 0 0 0.8em; }
+    .solr-search-chosen-item { display: inline-block; margin: 0 0.4em 0.3em 0; padding: 0.1em 0.5em; border: 1px solid #bbb; border-radius: 1em; background: #f4f4f4; }
+    .solr-search-chosen-item a { text-decoration: none; }
+    /* Redmine's "(101-128/128)" beside the pager is the exact count, which would disagree with the rounded one in the heading (UI review 16) */
+    .solr-search-result .pagination span.items { display: none; }
+    .solr-search-hit-count { color: #666; font-size: 0.8em; font-weight: normal; margin-left: 0.5em; }
+    .solr-search-results dt .solr-search-status { color: #666; }
+    .solr-search-none { color: #6b4a00; }
+    .solr-search-none ul { margin: 0.3em 0 0 1.5em; }
+    .solr-search-none p { margin: 0.3em 0; }
+    @keyframes solr-search-appear { from { opacity: 0; } to { opacity: 1; } }
+    /* narrow, left-aligned, with white space on the right (Google-like): a facet column can later be added on either side
+       without the results changing their look (2026-10-07) */
+    .solr-search-result { max-width: 700px; animation: solr-search-appear 0.4s ease-out; }
+    @media (prefers-reduced-motion: reduce) { .solr-search-result { animation: none; } }
+    <% if (highlight_style = SolrSearch::Settings.highlight_style).present? %>
+    .solr-search-results span.highlight { <%= raw(highlight_style) %> }
+    <% end %>
+  </style>
+  <%= javascript_tag do %>
+    // Redmine's +/- switch only listens to clicks: Enter and Space press it too (ui 19)
+    $(function() {
+      $('#solr-search-form').on('keydown', '.toggle-multiselect', function(e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $(this).trigger('click'); }
+      });
+    });
+  <% end %>
+<% end %>
+
+<% html_title(l(:label_solr_search)) -%>

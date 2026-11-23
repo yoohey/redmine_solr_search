@@ -1,0 +1,16 @@
+<%# One of the tops of the search log: the words and how many times (design D-45). rows: {words => times} %>
+<% if rows.empty? %>
+  <p class="nodata"><%= l(:label_no_data) %></p>
+<% else %>
+  <table class="list">
+    <thead><tr><th><%= l(:label_solr_search_log_query) %></th><th><%= l(:label_solr_search_log_times) %></th></tr></thead>
+    <tbody>
+      <% rows.each do |query, times| %>
+        <tr>
+          <td class="name"><%= link_to query, solr_search_admin_log_path(q: query, days: @days) %></td>
+          <td class="solr-search-number"><%= times %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+<% end %>

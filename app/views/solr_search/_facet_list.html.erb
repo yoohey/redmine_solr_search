@@ -1,0 +1,22 @@
+<%# One part of the bar: checkboxes with the number of results of each, in the order Solr gives (the most first); choosing one
+    does not move it. The first five and the chosen ones (a chosen one further down is not lost in the fold) are shown and
+    the rest on request, by a link under the list that opens the rest in place and closes it again.
+    locals: title, rows (and open: false to fold it until something in it is chosen) ([[id, name, count, chosen], ...]), name (the parameter, e.g. 'tracker_ids[]'), prefix (for the ids of the inputs) %>
+<% parts = rows.each_with_index.partition {|row, i| i < 5 || row[3] }.map {|part| part.map(&:first) } %>
+<% open = local_assigns.fetch(:open, true) || rows.any? {|row| row[3] } %>
+<details class="solr-search-facet-section" <%= 'open' if open %>>
+  <summary><%= title %></summary>
+  <% parts.each_with_index do |part, n| %>
+    <% next if part.empty? %>
+    <div<%= raw(' class="solr-search-facet-extra"') if n == 1 %>>
+      <% part.each do |id, label, count, chosen| %>
+        <label title="<%= l(:label_solr_search_group_count, count: number_with_delimiter(SolrSearch::CountRounding.round(count))) %>"><%= check_box_tag name, id, chosen, id: "#{prefix}-#{id.to_s.parameterize.presence || id.to_s.hash.abs}", form: 'solr-search-form' %> <%= label %></label>
+      <% end %>
+    </div>
+  <% end %>
+  <% if parts[1].any? %>
+    <%# shown by the script only: without it the whole list is there %>
+    <button type="button" class="solr-search-facet-toggle" hidden aria-expanded="false"
+            data-more="<%= l(:label_solr_search_show_more) %>" data-less="<%= l(:label_solr_search_show_less) %>"><%= l(:label_solr_search_show_more) %></button>
+  <% end %>
+</details>

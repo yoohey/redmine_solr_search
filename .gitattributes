@@ -1,0 +1,7 @@
+# Keep LF line endings on every OS. Shell scripts and config files run inside Linux containers, where CRLF (what Git
+# on Windows may check out) breaks them. Binary files are auto-detected.
+* text=auto eol=lf
+
+# Sample attachments are test fixtures: keep their bytes exactly as generated (some CSVs use CRLF on purpose, some
+# text files are Shift_JIS). The search expectations are computed from them.
+docker/seed/*/attachments/files/** -text

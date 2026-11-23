@@ -1,0 +1,30 @@
+<%# A document of an external source (design D-33, D-35). One document is one group. Its element carries the source,
+    path and so on as data attributes, whatever the source's display format: a script can make a link of its own. %>
+<% hit = group.hits.first %>
+<% source = @source_records[hit.source] %>
+<%= content_tag('div', solr_search_external_data(hit, source, group_id: group.group_id, rank: rank)) do %>
+  <dt>
+    <%# where it is above the link: the kind, the source and the path, small and light (2026-10-07) %>
+    <div class="solr-search-location">
+      <span class="solr-search-type"><%= l(:label_solr_search_type_external) %></span>
+      <%# not class "project": the name of a source is not the name of a project %>
+      <%= content_tag('span', source&.name || hit.source, class: 'solr-search-source-name') %>
+      <% if hit.path.present? %>
+        <span class="solr-search-external-path"><%= source ? source.display_path(hit.path) : hit.path %></span>
+      <% end %>
+    </div>
+    <div class="solr-search-title solr-search-title-external"><%= solr_search_external_title(hit, source) %></div>
+  </dt>
+  <dd>
+    <% solr_search_hit_lines(hit).each do |label, snippet, field| %>
+      <div class="solr-search-hit">
+        <% head = solr_search_hit_head(hit, field, label, nil, {}, {}, source) %>
+        <%= content_tag('div', head, class: 'solr-search-field') if head %>
+        <div class="solr-search-snippet description"><%= solr_search_snippet(snippet) %></div>
+      </div>
+    <% end %>
+    <% if (time = solr_search_external_time(hit)) %>
+      <span class="author"><%= l(:field_updated_on) %>: <%= time %></span>
+    <% end %>
+  </dd>
+<% end %>

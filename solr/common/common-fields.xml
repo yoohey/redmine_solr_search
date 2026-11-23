@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- redmine_solr_search: fields shared by every configset (design D-26, chapter 6).
+     Every field used in a search condition (q, fq, qf, sort, grouping, facets) is defined here, in every collection
+     with the same definition. Fields that are only returned (fl) go into each configset's schema.xml. -->
+<fields>
+  <field name="id"          type="string"      indexed="true" stored="true" required="true"/>
+  <field name="_version_"   type="plong"       indexed="false" stored="false"/>
+
+  <!-- Required, so that an indexer that forgets them is refused at index time. The permission filter lets documents
+       through by source (chapter 5), so a document without it must never get in. -->
+  <field name="source"      type="string"      indexed="true" stored="true" required="true"/>  <!-- redmine, src_12, ... -->
+  <field name="type"        type="string"      indexed="true" stored="true" required="true"/>  <!-- issue, journal, attachment, wiki_page, document, file -->
+  <field name="group_id"    type="string"      indexed="true" stored="true" required="true"/>  <!-- the container shown as one result (D-27) -->
+
+  <!-- Stored once, as n-gram (2 characters): shown and highlighted (D-21) -->
+  <field name="title"       type="rs_text_ngram" indexed="true" stored="true"/>
+  <field name="content"     type="rs_text_ngram" indexed="true" stored="true"/>
+  <!-- Search-only morphological copies (D-21) -->
+  <field name="title_ja"    type="rs_text_ja"  indexed="true" stored="false"/>
+  <field name="content_ja"  type="rs_text_ja"  indexed="true" stored="false"/>
+  <copyField source="title"   dest="title_ja"/>
+  <copyField source="content" dest="content_ja"/>
+
+  <field name="updated_at"  type="pdate"       indexed="true" stored="true"/>
+
+  <!-- Permissions (D-30). Empty for external documents -->
+  <field name="project_id"  type="pint"        indexed="true" stored="true"/>
+  <field name="is_private"  type="boolean"     indexed="true" stored="true"/>
+  <!-- An issue's values, on the issue and on each of its notes -->
+  <field name="author_id"       type="pint"    indexed="true" stored="true"/>
+  <field name="assigned_to_id"  type="pint"    indexed="true" stored="true"/>  <!-- a user or a group -->
+  <field name="tracker_id"      type="pint"    indexed="true" stored="true"/>
+  <!-- More values of the issue, for the facets and the choices of the search screen (D-49); not for permissions -->
+  <field name="status_id"       type="pint"    indexed="true" stored="true"/>
+  <field name="priority_id"     type="pint"    indexed="true" stored="true"/>
+  <field name="fixed_version_id" type="pint"   indexed="true" stored="true"/>  <!-- the target version -->
+  <field name="category_id"     type="pint"    indexed="true" stored="true"/>
+  <!-- The issue's dates, for the filters of the search screen (D-49): the start and due dates (a date: midnight UTC of it), when it
+       was created and closed (a time). On the issue and on each of its notes and attachments, like its other values. -->
+  <field name="start_date"      type="pdate"   indexed="true" stored="true"/>
+  <field name="due_date"        type="pdate"   indexed="true" stored="true"/>
+  <field name="issue_created_at" type="pdate"  indexed="true" stored="true"/>
+  <field name="issue_closed_at" type="pdate"   indexed="true" stored="true"/>
+  <!-- A note's own values -->
+  <field name="is_private_note" type="boolean" indexed="true" stored="true"/>
+  <field name="note_author_id"  type="pint"    indexed="true" stored="true"/>  <!-- journals.user_id -->
+  <!-- What an attachment is attached to (design D-36): issue, wiki_page, document, project, version. The permission
+       filter has a condition for each; only attachments have it. -->
+  <field name="container_type"  type="string"  indexed="true" stored="true"/>
+
+  <!-- The file type (D-49): the extension of a file name as it was written (pdf, PDF): an attachment's, sent by the
+       plugin; an external document's, made from its id by the update chain of the sources' collections. Empty for
+       Redmine's other documents. -->
+  <field name="file_extension"  type="string"  indexed="true" stored="true"/>
+  <!-- The folders of an external document (D-49): file_dir_K, the path up to the K-th folder, K = 1..6; made from the id by
+       the update chain of the sources' collections. Only for the facet and the choice of a folder: not stored. -->
+  <field name="file_dir_1"    type="string"  indexed="true" stored="false"/>
+  <field name="file_dir_2"    type="string"  indexed="true" stored="false"/>
+  <field name="file_dir_3"    type="string"  indexed="true" stored="false"/>
+  <field name="file_dir_4"    type="string"  indexed="true" stored="false"/>
+  <field name="file_dir_5"    type="string"  indexed="true" stored="false"/>
+  <field name="file_dir_6"    type="string"  indexed="true" stored="false"/>
+
+  <!-- Custom fields of issues (D-31), by the custom field's id: cft_12, cfj_12 (and, for the facets, cfs_12 ... below). The type
+       comes first, as a dynamic field's name may have its "*" only at the start or the end. Text, long text and list
+       formats; a list with several values chosen has several values. Stored for snippets, never returned (fl). -->
+  <dynamicField name="cft_*" type="rs_text_ngram" indexed="true" stored="true" multiValued="true"/>
+  <dynamicField name="cfj_*" type="rs_text_ja"    indexed="true" stored="false" multiValued="true"/>
+  <copyField source="cft_*" dest="cfj_*"/>
+  <!-- The values of the issue custom fields that are "used as a filter" (D-49), for the facets and the choices of the search
+       screen: the values of a list, a boolean, a key/value list, a user or a version (the id for the last three) as strings; a
+       number; a date. On the issue and on its notes and attachments, like the issue's other values. -->
+  <dynamicField name="cfs_*" type="string"  indexed="true" stored="true" multiValued="true"/>
+  <dynamicField name="cfn_*" type="pdouble" indexed="true" stored="true"/>
+  <dynamicField name="cfd_*" type="pdate"   indexed="true" stored="true"/>
+</fields>

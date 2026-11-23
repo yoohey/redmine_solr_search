@@ -1,0 +1,14 @@
+# The dictionary that the plugin starts with (design D-53, migration 019): put in when the plugin is installed, only if there
+# is no dictionary yet. Change it on the admin page ("Synonyms" tab); the history there keeps what was here first.
+# One group per line, the words that mean the same, separated by ",". A group is for a search for any of its words to find the
+# documents that write any of them. Empty the dictionary on the tab to start without one.
+#
+# The same thing under two names
+在宅勤務,テレワーク,リモートワーク
+インデックス,索引
+同義語,類義語
+手順書,マニュアル
+# Two spellings
+規程,規定
+# A word with a space (it shows the form; the search must hold the words together as written)
+シングル サインオン,SSO

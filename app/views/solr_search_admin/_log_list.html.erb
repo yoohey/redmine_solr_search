@@ -1,0 +1,51 @@
+<%# The list of the searches and its page links: also sent alone, for the page links that change the page in the background %>
+<h3><%= l(:label_solr_search_log_list, count: @log_count) %></h3>
+<% if @logs.empty? %>
+  <p class="nodata"><%= l(:label_no_data) %></p>
+<% else %>
+  <p class="info"><%= l(:text_solr_search_log_legend) %></p>
+  <table class="list solr-search-log">
+    <thead>
+      <tr>
+        <th><%= l(:field_created_on) %></th>
+        <th><%= l(:field_user) %></th>
+        <th><%= l(:label_solr_search_log_query) %></th>
+        <th><%= l(:label_solr_search_log_opened) %></th>
+        <th title="<%= l(:text_solr_search_log_hits) %>"><%= l(:label_solr_search_log_hits) %></th>
+        <th title="<%= l(:text_solr_search_log_dropped) %>"><%= l(:label_solr_search_log_dropped) %></th>
+        <th><%= l(:label_solr_search_log_took) %></th>
+        <th><%= l(:label_solr_search_log_page) %></th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <% @logs.each do |log| %>
+        <tr class="<%= 'solr-search-log-zero' if log.zero? %>">
+          <td><%= format_time(log.created_at) %></td>
+          <td><%= log.user_login || l(:label_solr_search_log_visitor) %></td>
+          <td class="name"><%= log.query %></td>
+          <td>
+            <% (@clicks[log.id] || []).each do |click| %>
+              <div><%= click.title.presence || click.group_id %> <small class="info">(<%= l(:label_solr_search_log_rank, rank: click.rank || '-') %>)</small></div>
+            <% end %>
+            <%# a search that found something and had no click: the sign of a search that did not help %>
+            <%= content_tag('em', l(:label_solr_search_log_no_click), class: 'info') if log.page == 1 && log.hit_count.to_i.positive? && @clicks[log.id].blank? %>
+          </td>
+          <td class="solr-search-number">
+            <% if log.error %>
+              <span class="icon icon-error" title="<%= log.error %>"><%= l(:label_solr_search_log_failed) %></span>
+            <% else %>
+              <%# 0 is said in a heavier letter too: the row's colour alone is easy to miss (M6 review 15) %>
+              <%= log.zero? ? content_tag('strong', log.hit_count) : log.hit_count %>
+            <% end %>
+          </td>
+          <td class="solr-search-number"><%= log.dropped_count.to_i.positive? ? solr_search_admin_warning(log.dropped_count.to_s) : log.dropped_count %></td>
+          <td class="solr-search-number"><%= log.took_ms %></td>
+          <td class="solr-search-number"><%= log.page %></td>
+          <td><%= link_to(l(:label_solr_search_log_rerun), log.request_path) if log.request_path.to_s.match?(%r{\A/[^/\\]}) %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+  <span class="pagination"><%= pagination_links_full @log_pages, @log_count, per_page_links: false %></span>
+<% end %>
